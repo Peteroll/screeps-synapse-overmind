@@ -201,4 +201,4 @@ function handleOutput(room, outputs) {
 
 // 角色 boost 請求 (簡化)：ranger 若未 boost 且房間有對應 mineral (XKHO2) 則標記並指派第一個輸出 lab 做 boost
 
-module.exports = { run };
+module.exports = { run: function(){} };

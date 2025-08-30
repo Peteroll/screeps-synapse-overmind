@@ -113,4 +113,4 @@ function clearRemoteLow(roomName) {
 
 function smooth() { /* hook for future higher freq smoothing */ }
 
-module.exports = { run };
+module.exports = { run: function(){} };

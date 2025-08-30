@@ -98,7 +98,7 @@ function handleMinerals(roomName, terminal) {
     }
 }
 
-module.exports = { run };
+module.exports = { run: function(){} };
 
 function handleProcurement(roomName, terminal) {
     if (Game.time % 200 !== 0) return; // 200 tick

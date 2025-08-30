@@ -1,44 +1,43 @@
-const log = require('util.log');
-
 module.exports = {
     run(creep) {
-        // 若沒有任何 WORK 部件，標記為 upgrader（避免無法採集的死板礦工）
-        if (creep.getActiveBodyparts(WORK) === 0) {
-            creep.memory.role = 'upgrader';
+        // 若有空間就採集
+        if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+            const src = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+            if (src) {
+                if (creep.harvest(src) === ERR_NOT_IN_RANGE) creep.moveTo(src, { visualizePathStyle: { stroke: '#ffaa00' } });
+            }
             return;
         }
-        if (!creep.memory.sourceId) assignSource(creep);
-        const source = Game.getObjectById(creep.memory.sourceId);
-        if (!source) { creep.say('nosrc'); return; }
-        if (creep.pos.getRangeTo(source) > 1) {
-            creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
-        } else {
-            const res = creep.harvest(source);
-            if (res !== OK) creep.say(res.toString());
-            // 若腳下沒有 container 且有 WORK>2 可以自動建造 container
-            if (!creep.memory.containerChecked) {
-                const containers = source.pos.findInRange(FIND_STRUCTURES, 1, { filter: s => s.structureType === STRUCTURE_CONTAINER });
-                const sites = source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, { filter: s => s.structureType === STRUCTURE_CONTAINER });
-                if (containers.length === 0 && sites.length === 0) {
-                    const pos = creep.pos; // 直接在當前位置放 (簡化)
-                    creep.room.createConstructionSite(pos, STRUCTURE_CONTAINER);
-                }
-                creep.memory.containerChecked = true;
+
+        // 滿載後嘗試交付能量
+        // 優先使用記錄在 Memory.roomContainers 的 container
+        const roomContainers = (Memory.roomContainers && Memory.roomContainers[creep.room.name]) || [];
+        for (const id of roomContainers) {
+            const c = Game.getObjectById(id);
+            if (c && c.store && c.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+                if (creep.transfer(c, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(c);
+                return;
             }
         }
+
+        // 若沒有 container 或 container 已滿，退回到附近的 spawn/extension/storage
+        const target = creep.pos.findClosestByPath(FIND_STRUCTURES, {
+            filter: (s) => (s.structureType === STRUCTURE_CONTAINER || s.structureType === STRUCTURE_STORAGE || s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION) &&
+                ((s.store && s.store.getFreeCapacity && s.store.getFreeCapacity(RESOURCE_ENERGY) > 0) || (s.energy !== undefined && s.energy < s.energyCapacity))
+        });
+
+        if (target) {
+            if (target.store && target.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+                if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(target, { visualizePathStyle: { stroke: '#ffffff' } });
+                return;
+            }
+            if (target.energy !== undefined && target.energy < target.energyCapacity) {
+                if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(target);
+                return;
+            }
+        }
+
+        // 沒有可交付目標就丟在地上，等待 hauler 或 upgrader 撿取
+        creep.drop(RESOURCE_ENERGY);
     }
 };
-
-function assignSource(creep) {
-    const sources = creep.room.find(FIND_SOURCES);
-    // 統計已被綁定數
-    const usage = {};
-    for (const s of sources) usage[s.id] = 0;
-    for (const name in Game.creeps) {
-        const c = Game.creeps[name];
-        if (c.memory.role === 'miner' && c.memory.sourceId) usage[c.memory.sourceId] = (usage[c.memory.sourceId] || 0) + 1;
-    }
-    let pick = sources[0];
-    for (const s of sources) if (usage[s.id] < usage[pick.id]) pick = s;
-    creep.memory.sourceId = pick.id;
-}

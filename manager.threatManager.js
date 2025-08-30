@@ -44,4 +44,4 @@ function threatOf(creep) {
     };
 }
 
-module.exports = { run };
+module.exports = { run: function(){} };

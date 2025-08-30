@@ -89,4 +89,4 @@ function batchLabSupply(q) {
     }
 }
 
-module.exports = { run };
+module.exports = { run: function(){} };

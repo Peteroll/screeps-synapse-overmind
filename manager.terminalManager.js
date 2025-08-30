@@ -41,4 +41,4 @@ function sellSurplusEnergy(terminal, surplus) {
     }
 }
 
-module.exports = { run };
+module.exports = { run: function(){} };

@@ -43,4 +43,4 @@ function getBuilderTarget(room) {
     return Memory.construction[room.name].builderTarget || 0;
 }
 
-module.exports = { run, getBuilderTarget };
+module.exports = { run: function(){}, getBuilderTarget: function(){ return 0; } };

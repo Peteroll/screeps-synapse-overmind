@@ -73,7 +73,7 @@ function get(roomName) {
     }
 }
 
-module.exports = { run, get };
+module.exports = { run: function(){}, recordTraffic: function(){} };
 // 記錄交通熱度
 function recordTraffic() {
     if (!Memory.traffic) Memory.traffic = {};

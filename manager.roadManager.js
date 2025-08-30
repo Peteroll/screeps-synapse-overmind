@@ -37,7 +37,7 @@ function maintain(room) {
     // 受損道路 repair job 已由 jobManager 自動處理 (hits < 50%)
 }
 
-module.exports = { run };
+module.exports = { run: function(){} };
 
 // 未來可加入：路 decay 預測 -> repair job 前置 (暫放這裡做示意)
 if (!global.__roadDecayHookInstalled) {

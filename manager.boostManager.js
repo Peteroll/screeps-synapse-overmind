@@ -86,7 +86,7 @@ function isReserved(mineral, amount) {
     return r >= amount;
 }
 
-module.exports = { run, isReserved };
+module.exports = { run: function(){} };
 
 function autoRoleRequests() {
     const cfg = require('util.config');

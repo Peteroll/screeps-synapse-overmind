@@ -50,4 +50,4 @@ function getPath(fromPos, toPos) {
     return ret.path;
 }
 
-module.exports = { run, getPath };
+module.exports = { run };

@@ -39,4 +39,4 @@ function buildKPI() { // (D) KPI
     }
     return { harvestRate: harvest, upgradeRate: upgradeRate, haulerIdle: idlePct, marketRev: rev1k };
 }
-module.exports = { draw };
+module.exports = { draw: function(){} };

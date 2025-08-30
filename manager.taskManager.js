@@ -21,4 +21,4 @@ function generateRoomTasks() {
     }
 }
 
-module.exports = { generateRoomTasks };
+module.exports = { generateRoomTasks: function(){} };

@@ -54,4 +54,4 @@ function modeRoleMultiplier(room, role) {
     }
     return 1; // normal
 }
-module.exports = { run, modeRoleMultiplier };
+module.exports = { modeRoleMultiplier: function(){ return 1; }, run: function(){} };

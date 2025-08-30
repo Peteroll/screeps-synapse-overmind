@@ -147,4 +147,4 @@ function fallbackTask(creep) {
     return false;
 }
 
-module.exports = { buildGlobalQueue, claimJob, getJob, completeJob, fallbackTask };
+module.exports = { getJob: ()=>null, claimJob: ()=>{}, completeJob: ()=>{}, run: function(){} };

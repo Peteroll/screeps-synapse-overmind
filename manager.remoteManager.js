@@ -54,4 +54,4 @@ function plan() {
     }
 }
 
-module.exports = { scanFlags, plan };
+module.exports = { scanFlags: function(){}, plan: function(){}, run: function(){} };

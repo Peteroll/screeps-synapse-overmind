@@ -8,7 +8,7 @@
 
 > 突觸式主腦：以模組化 Manager + 動態威脅/經濟/交通/佈局驅動，專注「長期穩定 + 擴張節奏 + 防禦彈性」。
 
-作者標識：HTTP400 (可自行替換)
+作者：HTTP400  
 
 ---
 
@@ -223,7 +223,7 @@ Memory.remotes
 
 ---
 
-\n## 命名補充：Synapse Overmind
+## 命名補充：Synapse Overmind
 Synapse (突觸) 象徵多 Manager 之間高頻訊號交換；Overmind 意指統御層決策協調經濟 / 軍事 / 擴張。名稱旨在突出「訊號驅動 + 模組協奏」的結構哲學。
 
 如需改名，可直接全域搜 `Synapse Overmind` 替換。

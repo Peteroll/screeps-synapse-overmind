@@ -55,6 +55,20 @@ function buildGlobalQueue() {
                 if (!existing.has(key)) queue.push(makeJob('refillTerminal', roomName, room.terminal.id, 4));
             }
         }
+        // 礦物 container / 掉落資源 → haulMineral 任務
+        const mineral = room.find(FIND_MINERALS)[0];
+        if (mineral) {
+            const cont = mineral.pos.findInRange(FIND_STRUCTURES,1,{filter:s=>s.structureType===STRUCTURE_CONTAINER && s.store.getUsedCapacity() > 200})[0];
+            if (cont) {
+                const key = cont.id + '|haulMineral';
+                if (!existing.has(key)) queue.push(makeJob('haulMineral', roomName, cont.id, 3));
+            }
+            const drops = mineral.pos.findInRange(FIND_DROPPED_RESOURCES,2,{filter:r=>r.resourceType!==RESOURCE_ENERGY && r.amount>100});
+            for (const d of drops) {
+                const key = d.id + '|haulMineral';
+                if (!existing.has(key)) queue.push(makeJob('haulMineral', roomName, d.id, 3));
+            }
+        }
     }
 
     // 依動態priority 排序 (高 → 低)

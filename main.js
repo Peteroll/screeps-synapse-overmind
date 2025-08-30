@@ -18,6 +18,10 @@ const layoutManager = require('manager.layoutManager');
 const costMatrixManager = require('manager.costMatrix');
 const terminalManager = require('manager.terminalManager');
 const expansionManager = require('manager.expansionManager');
+const labManager = require('manager.labManager');
+const roiManager = require('manager.roiManager');
+const roadManager = require('manager.roadManager');
+const energyBalanceManager = require('manager.energyBalanceManager');
 require('util.movement'); // 會覆寫 moveTo 做快取
 
 const roleMiner = require('role.miner');
@@ -30,6 +34,7 @@ const roleReserver = require('role.reserver');
 const roleRemoteMiner = require('role.remoteMiner');
 const roleRemoteHauler = require('role.remoteHauler');
 const rolePioneer = require('role.pioneer');
+const roleMineralMiner = require('role.mineralMiner');
 
 module.exports.loop = function () {
     const startCpu = Game.cpu.getUsed();
@@ -50,6 +55,10 @@ module.exports.loop = function () {
     threatManager.run();
     economyManager.run();
     expansionManager.run();
+    labManager.run();
+    roiManager.run();
+    roadManager.run();
+    energyBalanceManager.run();
 
     // Link 網路
     linkManager.run();
@@ -74,6 +83,7 @@ module.exports.loop = function () {
             case 'remoteMiner': roleRemoteMiner.run(creep); break;
             case 'remoteHauler': roleRemoteHauler.run(creep); break;
             case 'pioneer': rolePioneer.run(creep); break;
+            case 'mineralMiner': roleMineralMiner.run(creep); break;
             default:
                 // 臨時未知角色 → 指派 upgrade
                 creep.memory.role = 'upgrader';

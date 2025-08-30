@@ -45,14 +45,47 @@ function planRoom(room, rcl) {
     }
     if (rcl >= 6) {
         hub.terminal = [spawn.pos.x + 1, spawn.pos.y + 2];
-        // 簡化放 3 labs
-        hub.labs = [
+        // Labs 初階 (3)
+        const baseLabs = [
             [spawn.pos.x -1, spawn.pos.y +2],
             [spawn.pos.x -1, spawn.pos.y +3],
             [spawn.pos.x, spawn.pos.y +3]
         ];
+        // RCL8 追加擴展 labs (最多 10) 圍繞 storage/terminal 區域
+        if (rcl >= 8) {
+            const extra = [
+                [spawn.pos.x +2, spawn.pos.y +2],
+                [spawn.pos.x +2, spawn.pos.y +1],
+                [spawn.pos.x +2, spawn.pos.y +3],
+                [spawn.pos.x +1, spawn.pos.y +3],
+                [spawn.pos.x -2, spawn.pos.y +2],
+                [spawn.pos.x, spawn.pos.y +4],
+                [spawn.pos.x +1, spawn.pos.y +4]
+            ];
+            hub.labs = baseLabs.concat(extra).slice(0,10);
+        } else hub.labs = baseLabs;
     }
-    return { rclPlanned: rcl, roads: dedupXY(roads), extensions, links, hub, lastUpdate: Game.time };
+    // Factory 放置 (RCL7+) 若未放置：
+    if (rcl >=7) {
+        hub.factory = [spawn.pos.x +2, spawn.pos.y +1];
+    }
+    // Rampart ring (RCL5+)：以 spawn 為中心半徑3 形成方形護盾
+    let ramparts = [];
+    if (rcl >=5) {
+        const radius = 3;
+        for (let dx=-radius; dx<=radius; dx++) {
+            for (let dy=-radius; dy<=radius; dy++) {
+                if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue; // 只取外框
+                const x = spawn.pos.x + dx, y = spawn.pos.y + dy;
+                if (x<1||x>48||y<1||y>48) continue;
+                ramparts.push([x,y]);
+            }
+        }
+    }
+    // 記錄礦物座標 (便於後續建立 extractor)
+    const mineral = room.find(FIND_MINERALS)[0];
+    const mineralPos = mineral ? [mineral.pos.x, mineral.pos.y] : null;
+    return { rclPlanned: rcl, roads: dedupXY(roads), extensions, links, hub, ramparts: dedupXY(ramparts), mineral: mineralPos, lastUpdate: Game.time };
 }
 
 function dedupXY(arr) {
@@ -107,6 +140,35 @@ function placeSites(room, layout) {
         if (layout.hub.storage) tryPlace(STRUCTURE_STORAGE, [layout.hub.storage], 1);
         if (layout.hub.terminal && room.controller.level >=6) tryPlace(STRUCTURE_TERMINAL, [layout.hub.terminal], 1);
         if (layout.hub.labs && room.controller.level >=6) tryPlace(STRUCTURE_LAB, layout.hub.labs, 2);
+        if (layout.hub.factory && room.controller.level >=7) tryPlace(STRUCTURE_FACTORY, [layout.hub.factory], 1);
+        // 保護核心設施：在 storage / terminal / factory / labs 上擺 rampart (RCL6+)
+        if (room.controller.level >=6) {
+            const protect = [];
+            ['storage','terminal','factory'].forEach(k=> layout.hub[k] && protect.push(layout.hub[k]));
+            if (layout.hub.labs) protect.push(...layout.hub.labs);
+            tryPlace(STRUCTURE_RAMPART, protect, 6);
+        }
+    }
+    // Rampart ring 放置 (RCL5+)
+    if (room.controller.level >=5 && layout.ramparts) tryPlace(STRUCTURE_RAMPART, layout.ramparts, 4);
+    // Extractor (RCL6+) 若房有 mineral 且尚未有 extractor
+    if (room.controller.level >=6 && layout.mineral) {
+        const hasExtractor = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_EXTRACTOR }).length > 0
+            || room.find(FIND_CONSTRUCTION_SITES, { filter: s => s.structureType === STRUCTURE_EXTRACTOR }).length > 0;
+        if (!hasExtractor) {
+            const [mx,my] = layout.mineral;
+            room.createConstructionSite(mx,my,STRUCTURE_EXTRACTOR);
+        }
+    }
+    // Container -> Link 升級：若 source 旁已有 link 則嘗試移除幾乎空的 container
+    if (room.controller.level >=6) {
+        const sourceLinks = room.find(FIND_STRUCTURES,{filter:s=>s.structureType===STRUCTURE_LINK});
+        for (const src of room.find(FIND_SOURCES)) {
+            const hasLink = sourceLinks.some(l=> l.pos.inRangeTo(src.pos,2));
+            if (!hasLink) continue;
+            const cont = src.pos.findInRange(FIND_STRUCTURES,1,{filter:s=>s.structureType===STRUCTURE_CONTAINER})[0];
+            if (cont && cont.store.getUsedCapacity() < 200) cont.destroy();
+        }
     }
 }
 

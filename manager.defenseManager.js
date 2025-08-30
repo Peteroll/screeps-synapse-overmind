@@ -57,6 +57,15 @@ function run() {
                     Memory.defense.tempBoost = { tick: Game.time, original: Memory.defense.wallTarget };
                     Memory.defense.wallTarget = Math.floor(Memory.defense.wallTarget * 1.5);
                 }
+                // 拆牆預測：估算敵方 WORK (dismantle) 潛在輸出，目標牆值 = 拆除輸出 * surviveTime
+                const dismantleParts = hostiles.reduce((s,c)=> s + c.getActiveBodyparts(WORK),0);
+                if (dismantleParts>0) {
+                    const cfg = require('util.config');
+                    const perWork = 50; // 每 WORK 每 tick 拆牆 hits (Screeps 拆除建築 50/tick)
+                    const desire = dismantleParts * perWork * cfg.DEFENSE.DISMANTLE_SURVIVE_TIME;
+                    const increase = Math.max(cfg.DEFENSE.DISMANTLE_MIN_INCREASE, desire);
+                    if (Memory.defense.wallTarget < increase) Memory.defense.wallTarget = increase;
+                }
             } else if (Memory.defense.tempBoost && Game.time - Memory.defense.tempBoost.tick > 200) {
                 Memory.defense.wallTarget = Memory.defense.tempBoost.original;
                 delete Memory.defense.tempBoost;

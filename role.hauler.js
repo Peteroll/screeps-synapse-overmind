@@ -2,8 +2,9 @@ const jobManager = require('manager.jobManager');
 
 module.exports = {
     run(creep) {
-        if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0) creep.memory.working = false;
-        if (!creep.memory.working && creep.store.getFreeCapacity() === 0) creep.memory.working = true;
+    // working=true 表示在投遞 (任何資源) 階段
+    if (creep.memory.working && creep.store.getUsedCapacity() === 0) creep.memory.working = false;
+    if (!creep.memory.working && creep.store.getFreeCapacity() === 0) creep.memory.working = true;
 
         // 清除失效 job
         if (creep.memory.jobId && !jobManager.getJob(creep.memory.jobId)) delete creep.memory.jobId;
@@ -19,9 +20,39 @@ module.exports = {
             const src = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
             if (src && creep.harvest(src) === ERR_NOT_IN_RANGE) creep.moveTo(src);
         } else {
+            // 若有 haulMineral 工作尚未領取，優先處理
+            if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'haulMineral');
+            // Lab 補給優先度次之
+            if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'labSupply');
+            // Output 回收
+            if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'labPickup');
             // 若存在專用 refillTerminal job
             if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'refillTerminal');
             const job = creep.memory.jobId && jobManager.getJob(creep.memory.jobId);
+            if (job && job.type === 'haulMineral') {
+                const tgt = Game.getObjectById(job.targetId);
+                if (!tgt) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                else {
+                    // 可能是 container 或 dropped resource
+                    if (tgt.store) {
+                        // 取出所有非 energy 資源
+                        let took = false;
+                        for (const r in tgt.store) {
+                            if (tgt.store[r] > 0 && r !== RESOURCE_ENERGY) {
+                                if (creep.withdraw(tgt, r) === ERR_NOT_IN_RANGE) creep.moveTo(tgt); else took = true;
+                                break;
+                            }
+                        }
+                        if (!took && tgt.store.getUsedCapacity() === 0) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                    } else if (tgt.amount) {
+                        if (creep.pickup(tgt) === ERR_NOT_IN_RANGE) creep.moveTo(tgt);
+                        else if (tgt.amount === 0) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                    }
+                    // 已滿 → 投遞
+                    if (creep.store.getFreeCapacity() === 0) creep.memory.working = true;
+                    return;
+                }
+            }
             if (job && job.type === 'refillTerminal') {
                 const tgt = Game.getObjectById(job.targetId);
                 if (!tgt) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
@@ -31,11 +62,66 @@ module.exports = {
                     return;
                 }
             }
+            if (job && job.type === 'labSupply') {
+                // targetId=storage, data.dest=lab, resource
+                const storage = Game.getObjectById(job.targetId);
+                const lab = Game.getObjectById(job.data.dest);
+                if (!storage || !lab) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                else if (!creep.memory.filling && creep.store.getUsedCapacity() === 0) {
+                    creep.memory.filling = true;
+                    const res = job.data.resource;
+                    if ((storage.store[res]||0) === 0) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                    else if (creep.withdraw(storage,res) === ERR_NOT_IN_RANGE) creep.moveTo(storage);
+                } else {
+                    const res = job.data.resource;
+                    if (creep.store[res] > 0) {
+                        if (creep.transfer(lab,res) === ERR_NOT_IN_RANGE) creep.moveTo(lab);
+                        else if ((lab.store[res]||0) >= config && creep.store[res] === 0) { /* noop */ }
+                    }
+                    if (creep.store.getUsedCapacity() === 0 || (lab && lab.store.getFreeCapacity(job.data.resource) === 0)) { jobManager.completeJob(job.id); delete creep.memory.jobId; delete creep.memory.filling; }
+                }
+                return;
+            }
+            if (job && job.type === 'labPickup') {
+                const lab = Game.getObjectById(job.targetId);
+                if (!lab || !lab.mineralType || lab.store[lab.mineralType] === 0) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                else {
+                    const res = lab.mineralType;
+                    if (creep.store.getFreeCapacity() > 0 && lab.store[res] > 0) {
+                        if (creep.withdraw(lab,res) === ERR_NOT_IN_RANGE) creep.moveTo(lab);
+                    } else {
+                        if (creep.room.storage) {
+                            for (const r in creep.store) {
+                                if (creep.transfer(creep.room.storage,r) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.storage);
+                                break;
+                            }
+                        }
+                        if (lab.store[res] < 200) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                    }
+                }
+                return;
+            }
             // 一般補給：spawn/extension/tower/storage
             const target = creep.pos.findClosestByPath(FIND_STRUCTURES, {
                 filter: s => [STRUCTURE_SPAWN, STRUCTURE_EXTENSION, STRUCTURE_TOWER].includes(s.structureType) && s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
             }) || creep.room.storage || creep.pos.findClosestByPath(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_CONTAINER && s.store.getFreeCapacity(RESOURCE_ENERGY) > 0 });
-            if (target && creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(target);
+            // 若有非 energy 資源，優先送 storage / terminal
+            const hasNonEnergy = Object.keys(creep.store).some(r => r !== RESOURCE_ENERGY);
+            if (hasNonEnergy && creep.room.storage) {
+                for (const r in creep.store) {
+                    if (creep.store[r] > 0 && r !== RESOURCE_ENERGY) {
+                        if (creep.transfer(creep.room.storage, r) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.storage);
+                        return;
+                    }
+                }
+            }
+            if (target && creep.store[RESOURCE_ENERGY] > 0) {
+                if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(target);
+            } else if (creep.room.storage && creep.store.getUsedCapacity() > 0) {
+                for (const r in creep.store) {
+                    if (creep.transfer(creep.room.storage, r) === ERR_NOT_IN_RANGE) { creep.moveTo(creep.room.storage); break; }
+                }
+            }
         }
     }
 };

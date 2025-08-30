@@ -59,7 +59,20 @@ function run() {
         target.remoteHauler = aggregatedRemote.remoteHauler;
         target.reserver = aggregatedRemote.reserver;
 
-        const order = ['miner', 'hauler', 'upgrader', 'builder', 'repairer', 'ranger', 'reserver', 'remoteMiner', 'remoteHauler', 'pioneer'];
+        // Mineral Miner 啟用條件: RCL6+ 且有 extractor 且 mineral 尚有存量 且 Storage 容量未過高
+        if (room.controller && room.controller.level >=6) {
+            const mineral = room.find(FIND_MINERALS)[0];
+            if (mineral) {
+                const extractor = room.find(FIND_STRUCTURES, {filter:s=>s.structureType===STRUCTURE_EXTRACTOR})[0];
+                const storage = room.storage;
+                const storageOk = !storage || storage.store.getFreeCapacity() > 50000; // 避免爆倉
+                if (extractor && mineral.mineralAmount > 0 && storageOk) {
+                    target.mineralMiner = 1;
+                }
+            }
+        }
+
+        const order = ['miner', 'hauler', 'upgrader', 'builder', 'repairer', 'ranger', 'reserver', 'remoteMiner', 'remoteHauler', 'pioneer', 'mineralMiner'];
         // Pioneer 需求：若存在 expansion target 且該房未被我方控制 -> 1
         if (Memory.expansion && Memory.expansion.target) {
             const targetRoom = Memory.expansion.target;
@@ -109,6 +122,7 @@ function buildDynamicBody(role, energyCap) {
     case 'remoteMiner': pattern = [WORK, WORK, MOVE]; maxRepeat = 5; break;
     case 'remoteHauler': pattern = [CARRY, CARRY, MOVE]; maxRepeat = 10; break;
     case 'pioneer': pattern = [WORK, CARRY, MOVE]; maxRepeat = 8; break;
+    case 'mineralMiner': pattern = [WORK, WORK, MOVE]; maxRepeat = 5; break;
         default: pattern = [WORK, CARRY, MOVE];
     }
     const cost = p => partCost(p);

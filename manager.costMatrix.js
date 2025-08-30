@@ -42,6 +42,23 @@ function buildMatrix(room) {
             }
         }
     }
+    // 敵人攻擊範圍避讓 (近似)：將敵方 creep (ATTACK 或 RANGED) 周圍格成本提高
+    const hostiles = room.find(FIND_HOSTILE_CREEPS, {filter: c => c.getActiveBodyparts(ATTACK)+c.getActiveBodyparts(RANGED_ATTACK) > 0});
+    if (hostiles.length) {
+        const avoidCost = (global.config && global.config.PATH && global.config.PATH.HOSTILE_AVOID_COST) || 50;
+        for (const h of hostiles) {
+            for (let dx=-3; dx<=3; dx++) for (let dy=-3; dy<=3; dy++) {
+                const x = h.pos.x+dx, y = h.pos.y+dy;
+                if (x<0||x>49||y<0||y>49) continue;
+                const prev = cm.get(x,y);
+                if (prev === 0xff) continue;
+                const dist = Math.max(Math.abs(dx), Math.abs(dy));
+                const add = Math.max(1, avoidCost - dist*10);
+                const val = Math.min(254, prev + add);
+                cm.set(x,y,val);
+            }
+        }
+    }
     return cm;
 }
 

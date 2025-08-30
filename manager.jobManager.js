@@ -1,0 +1,96 @@
+// 全域 Job 佇列：將 room.memory.tasks 轉換成細粒度工作單
+// job 結構: {id,type,room,targetId,priority,data,assigned}
+const log = require('util.log');
+
+function buildGlobalQueue() {
+    if (!Memory.jobs) Memory.jobs = {};
+    if (!Memory.jobs.queue) Memory.jobs.queue = [];
+    const queue = Memory.jobs.queue;
+
+    // 每 50 tick 清理過期 (assigned 但 creep 不存在)
+    if (Game.time % 50 === 0) {
+        for (const job of queue) {
+            if (job.assigned && !Game.creeps[job.assigned]) job.assigned = null;
+        }
+    }
+
+    // 老化: 提升長時間未處理工作權重
+    for (const job of queue) {
+        if (!job.age) job.age = 0;
+        job.age++;
+        // ageBoost = log2(age+1)
+        job.dynamicPriority = job.priority + Math.floor(Math.log2(job.age + 1));
+        // 若 assigned 很久卻沒完成 (>1500 tick) 釋放
+        if (job.assigned && job.age > 1500) job.assigned = null;
+    }
+
+    // 已存在 job 的 targetId 做索引避免重複
+    const existing = new Set(queue.map(j => j.targetId + '|' + j.type));
+
+    for (const roomName in Game.rooms) {
+        const room = Game.rooms[roomName];
+        // 建造
+        const sites = room.find(FIND_CONSTRUCTION_SITES);
+        for (const site of sites) {
+            const key = site.id + '|build';
+            if (!existing.has(key)) queue.push(makeJob('build', roomName, site.id, 5));
+        }
+        // 修理 (不含牆，牆由 defenseManager 漸進處理)
+        const repairs = room.find(FIND_STRUCTURES, { filter: s => s.hits < s.hitsMax * 0.5 && s.structureType !== STRUCTURE_WALL });
+        for (const s of repairs) {
+            const key = s.id + '|repair';
+            if (!existing.has(key)) queue.push(makeJob('repair', roomName, s.id, 4));
+        }
+        // Tower 補能
+        const towers = room.find(FIND_MY_STRUCTURES, { filter: s => s.structureType === STRUCTURE_TOWER && s.store.getFreeCapacity(RESOURCE_ENERGY) > 300 });
+        for (const t of towers) {
+            const key = t.id + '|refill';
+        if (!existing.has(key)) queue.push(makeJob('refill', roomName, t.id, 6));
+        }
+        // Terminal 補能任務 (外部 terminalManager 可能已 push 但補一層避免漏)
+        if (room.terminal && room.storage) {
+            const termNeed =  (room.terminal.store[RESOURCE_ENERGY] || 0) < 25000;
+            if (termNeed) {
+                const key = room.terminal.id + '|refillTerminal';
+                if (!existing.has(key)) queue.push(makeJob('refillTerminal', roomName, room.terminal.id, 4));
+            }
+        }
+    }
+
+    // 依動態priority 排序 (高 → 低)
+    queue.sort((a, b) => (b.dynamicPriority || b.priority) - (a.dynamicPriority || a.priority));
+
+    // 限制長度防爆記憶
+    if (queue.length > 300) queue.splice(300);
+}
+
+function makeJob(type, room, targetId, priority) {
+    return { id: `${type}_${targetId}`, type, room, targetId, priority, dynamicPriority: priority, data: {}, assigned: null, age: 0 };
+}
+
+// creep 呼叫以取得一份 job
+function claimJob(creep, filterFn) {
+    if (!Memory.jobs || !Memory.jobs.queue) return null;
+    const queue = Memory.jobs.queue;
+    for (const job of queue) {
+        if (job.assigned) continue;
+        if (filterFn && !filterFn(job)) continue;
+        job.assigned = creep.name;
+        creep.memory.jobId = job.id;
+        return job;
+    }
+    return null;
+}
+
+function getJob(jobId) {
+    if (!Memory.jobs || !Memory.jobs.queue) return null;
+    return Memory.jobs.queue.find(j => j.id === jobId);
+}
+
+function completeJob(jobId) {
+    if (!Memory.jobs || !Memory.jobs.queue) return;
+    const idx = Memory.jobs.queue.findIndex(j => j.id === jobId);
+    if (idx >= 0) Memory.jobs.queue.splice(idx, 1);
+}
+
+module.exports = { buildGlobalQueue, claimJob, getJob, completeJob };

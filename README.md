@@ -1,6 +1,30 @@
-# Screeps 自動化程式 (HTTP400)
+# Synapse Overmind – Screeps 全自動策略框架
+
+[![Strategy](https://img.shields.io/badge/strategy-Synapse%20Overmind-6cf)](#策略名稱與嵌入)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](#版本)
+[![Screeps](https://img.shields.io/badge/screeps-live-green)](https://screeps.com)
+[![License](https://img.shields.io/badge/license-Custom-lightgrey)](#授權)
+[![Language](https://img.shields.io/badge/lang-%E4%B8%AD%E8%8B%B1%E9%9B%99%E8%AA%9E-orange)](#english-overview)
+
+> 突觸式主腦：以模組化 Manager + 動態威脅/經濟/交通/佈局驅動，專注「長期穩定 + 擴張節奏 + 防禦彈性」。
+
+作者標識：HTTP400 (可自行替換)
+
+---
+
+## 策略名稱與嵌入
+
+建議在 `main.js` 最上方加入：
+
+```js
+global.STRATEGY_NAME = 'Synapse Overmind';
+if (!Memory.strategyName) Memory.strategyName = global.STRATEGY_NAME;
+```
+
+HUD 或 Visual 可引用 `global.STRATEGY_NAME` 統一顯示。
 
 ## 功能總覽
+
 - 動態角色生產：miner / hauler / upgrader / builder / repairer / ranger / reserver / remoteMiner / remoteHauler
 - Miner/Hauler 分離：miner 固定採收 + 自建 container，hauler 集中搬運
 - 遠程擴張：旗標 `remote:<房間>:<模式>` (模式: `mine` 或 `reserve`) 啟用遠程配置
@@ -33,6 +57,82 @@
 - Threat 分解：heal/ranged/melee/dismantle/siege 細項 + 雙閾值切換 warMode
 - Hub 佈局 v2：spawn 周邊自動規劃 storage / terminal / labs 放置
 - 擴張自動旗標 + 先遣 pioneer 角色生成
+
+## 版本
+
+| 版本 | 日期 | 重點 |
+|------|------|------|
+| 0.1.0 | 初始 | 核心管理器 / 動態威脅分解 / BFS 擴張 / Hub 規劃 / Traffic CostMatrix |
+
+語義版號預計：MAJOR(破壞性).MINOR(功能) .PATCH(修補)。現階段仍屬快速迭代原型，API 未凍結。
+
+## 功能分類速覽
+
+經濟 / 生產
+
+- 動態角色生產、經濟節流 (模式倍率)、Terminal 能量緩衝與補能 job、Market 高價出售
+- Miner/Hauler 分離，遠程礦鏈 (remoteMiner / remoteHauler / reserver)
+
+建造 / 佈局 / 路徑
+
+- 建築規劃 layoutManager：道路 / extension / link + Hub v2 (storage / terminal / labs)
+- 路徑快取 + CostMatrix 動態交通加權 + moveSmart 卡住檢測
+
+任務 / 排程
+
+- 任務統計 taskManager → jobManager 細粒度工作 (build / repair / refill / refillTerminal)
+- 工作老化 + 動態優先級 (log2 boost) 防餓死
+
+防禦 / 威脅 / 作戰
+
+- 塔防：攻擊 > 治療 > 分階段牆/堡維護 + 動態 wallTarget Boost
+- Threat 分解 (heal/ranged/melee/dismantle/siege) + warMode 閾值
+- Ranger：風箏 (flee) + 集火優先次序 (受傷 healer > healer > ranged > melee)
+- SafeMode 自動啟動條件（spawn 受損 + 塔能低 + 敵襲）
+
+擴張 / 規模化
+
+- 遠程旗標 `remote:<room>:<mode>` + 自動角色目標聚合
+- Expansion BFS 掃描 + 評分 + 自動旗標 + Pioneer 先遣
+
+維運 / 視覺
+
+- HUD：能量/模式/威脅顯示；CPU & bucket 週期紀錄
+- 記憶體清理 / wallTarget 漸進 / 交通統計衰減
+
+## English Overview
+
+High‑level automated Screeps framework focusing on adaptive economy, layered defense, expansion pacing and low CPU path infrastructure.
+
+Core Highlights
+
+- Dynamic spawning & economy throttling (conserve / normal / boost)
+- Job queue with aging + logarithmic priority inflation
+- Remote operations (mining / reservation) with aggregated targets
+- Layout & Hub planner (roads, extensions, links, storage, terminal, labs)
+- Cached paths + adaptive CostMatrix (roads + congestion heat)
+- Threat breakdown (heal / ranged / melee / dismantle / siege) → warMode switch
+- Ranger micro: flee kiting + healer focus fire ordering
+- Auto SafeMode trigger (spawn damage + low tower energy + hostiles)
+- Expansion BFS scan + scoring + auto flag + pioneer bootstrap
+- Terminal energy band buffering + market sell logic
+
+Modules Summary
+
+- spawn / defense / link / task / job / remote / pathCache / market / economy / threat / hud / layout / costMatrix / terminal / expansion
+
+Planned Roadmap (next)
+
+- Lab reaction scheduler & boost provisioning
+- Multi-room energy balancing via terminal trade
+- Advanced combat formations & target clustering
+- Remote ROI tracking & auto decommission
+- Full cost matrix persistence across shards (optional compression)
+
+Naming
+Synapse Overmind underscores modular managers acting like neural synapses feeding a central orchestration layer.
+
+---
 
 ## 目錄結構
 
@@ -114,4 +214,16 @@ Memory.remotes
 
 ## 授權
 
-此代碼可自由修改、延伸，請依個人需要調整。
+此專案可自由修改、延伸。若公開發布，建議：
+
+1. 移除作者識別 (HTTP400) 或改為團隊名。
+2. 增加 CHANGELOG.md 追蹤改動。
+3. 使用分支 `develop` 做新功能合併再推 `main`。
+
+
+---
+
+\n## 命名補充：Synapse Overmind
+Synapse (突觸) 象徵多 Manager 之間高頻訊號交換；Overmind 意指統御層決策協調經濟 / 軍事 / 擴張。名稱旨在突出「訊號驅動 + 模組協奏」的結構哲學。
+
+如需改名，可直接全域搜 `Synapse Overmind` 替換。

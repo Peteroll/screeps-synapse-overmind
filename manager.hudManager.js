@@ -8,7 +8,16 @@ function draw() {
         const econ = Memory.economy && Memory.economy[roomName];
         const threat = Memory.threat && Memory.threat.level || 0;
         const war = Memory.threat && Memory.threat.warMode ? 'WAR' : '';
-        room.visual.text(`E:${(econ && econ.energy)||0} ${econ?econ.mode:''} T:${threat} ${war}`, 1, 1, {align:'left',opacity:0.8,font:0.7});
+        const mineral = room.find(FIND_MINERALS)[0];
+        let mStr = '';
+        if (mineral) {
+            if (mineral.mineralAmount > 0) {
+                mStr = `${mineral.mineralType}:${mineral.mineralAmount}`;
+            } else {
+                mStr = `${mineral.mineralType}:regen${mineral.ticksToRegeneration}`;
+            }
+        }
+        room.visual.text(`E:${(econ && econ.energy)||0} ${econ?econ.mode:''} T:${threat} ${war} ${mStr}`, 1, 1, {align:'left',opacity:0.8,font:0.7});
     }
 }
 module.exports = { draw };

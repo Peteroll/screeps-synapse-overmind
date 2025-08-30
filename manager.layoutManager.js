@@ -159,6 +159,21 @@ function placeSites(room, layout) {
             const [mx,my] = layout.mineral;
             room.createConstructionSite(mx,my,STRUCTURE_EXTRACTOR);
         }
+        // 旁邊 container site (若無 container / site) 讓 builder 先建，避免等待 miner 出現才放
+        const [mx,my] = layout.mineral;
+        const mineralPos = new RoomPosition(mx,my,room.name);
+        const hasContainer = mineralPos.findInRange(FIND_STRUCTURES,1,{filter:s=>s.structureType===STRUCTURE_CONTAINER}).length>0;
+        const hasContainerSite = mineralPos.findInRange(FIND_CONSTRUCTION_SITES,1,{filter:s=>s.structureType===STRUCTURE_CONTAINER}).length>0;
+        if (!hasContainer && !hasContainerSite) {
+            // 嘗試在 mineral 四周找可建地形
+            for (let dx=-1; dx<=1; dx++) for (let dy=-1; dy<=1; dy++) {
+                if (dx===0 && dy===0) continue;
+                const x=mx+dx, y=my+dy;
+                if (x<1||x>48||y<1||y>48) continue;
+                if (room.getTerrain().get(x,y) === TERRAIN_MASK_WALL) continue;
+                if (room.createConstructionSite(x,y,STRUCTURE_CONTAINER) === OK) { dx=2; dy=2; break; }
+            }
+        }
     }
     // Container -> Link 升級：若 source 旁已有 link 則嘗試移除幾乎空的 container
     if (room.controller.level >=6) {

@@ -7,7 +7,21 @@ module.exports = {
         const mineral = room.find(FIND_MINERALS)[0];
         if (!mineral) { creep.say('no min'); return; }
         // 等待礦物再生
-        if (mineral.mineralAmount === 0) { creep.say('regen'); return; }
+        if (mineral.mineralAmount === 0) {
+            creep.say('regen');
+            // 自動回收：若距 spawn < 20 並且 storage 能量正常，嘗試轉職或回收
+            const spawn = room.find(FIND_MY_SPAWNS)[0];
+            if (spawn) {
+                // 轉職為 upgrader (節流) 若還有可用生命 > 300
+                if (creep.ticksToLive > 300) {
+                    creep.memory.role = 'upgrader';
+                    creep.say('->upg');
+                } else {
+                    if (creep.pos.isNearTo(spawn)) spawn.recycleCreep(creep); else creep.moveTo(spawn, {reusePath:20});
+                }
+            }
+            return;
+        }
         const extractor = room.find(FIND_STRUCTURES, {filter:s=>s.structureType===STRUCTURE_EXTRACTOR})[0];
         if (!extractor) { creep.say('no ext'); return; }
         // 嘗試使用 container (若在礦物旁)

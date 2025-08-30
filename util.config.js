@@ -30,6 +30,29 @@ module.exports = {
     PATH: {
         HOSTILE_AVOID_COST: 50 // 在敵人攻擊半徑內提高 cost
     },
+    CONSTRUCTION: {
+        PRIORITY: {
+            spawn: 10,
+            storage: 9,
+            tower: 9,
+            extension: 8,
+            link: 8,
+            container: 7,
+            terminal: 7,
+            lab: 7,
+            factory: 7,
+            observer: 6,
+            powerSpawn: 6,
+            extractor: 6,
+            road: 5,
+            rampart: 4,
+            wall: 2
+        },
+        ASSUMED_WORK_PARTS: 5,
+        TARGET_WINDOW: 1200,
+        MAX_BUILDERS_BASE: 5,
+        LOW_BACKLOG_THRESHOLD: 20000
+    },
     LAB: {
         ENABLE: true,
         PRIMARY_REACTION: 'XKHO2', // 示意主要生成的 boost (Ranged Attack Boost)

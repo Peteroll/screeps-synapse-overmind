@@ -46,6 +46,13 @@ function run() {
         const sources = room.find(FIND_SOURCES);
         target.miner = Math.max(sources.length, target.miner);
 
+        // 建設動態需求
+        try {
+            var cm = require('manager.constructionManager');
+            var dynBuilder = cm.getBuilderTarget(room);
+            if (dynBuilder && dynBuilder > target.builder) target.builder = dynBuilder;
+        } catch(e) {}
+
         // 遠程需求 (由 remoteManager 填寫 Memory.remoteDesired)
         const remoteNeeds = Memory.remoteDesired || {};
         const aggregatedRemote = { remoteMiner: 0, remoteHauler: 0, reserver: 0 };

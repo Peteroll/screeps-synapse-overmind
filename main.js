@@ -2,7 +2,7 @@
 // 新增 managers / roles 模組化。若初次部署仍只有 main.js，請將下列 require 對應檔案加入。
 // 版本常數 (同步 README)
 global.STRATEGY_NAME = 'Synapse Overmind';
-global.STRATEGY_VERSION = '0.9.5'; // A-E 完成 (物流合併/ROI精細/多維經濟/Profiler+KPI/主動補貨)
+global.STRATEGY_VERSION = '0.9.6'; // 自動建設策略 (優先級+動態builder需求)
 
 const config = require('util.config');
 const log = require('util.log');
@@ -25,6 +25,9 @@ const labManager = require('manager.labManager');
 const roiManager = require('manager.roiManager');
 const roadManager = require('manager.roadManager');
 const logisticsManager = require('manager.logisticsManager'); // A: 物流合併
+let constructionManager; // 自動建設策略 (容錯)
+try { constructionManager = require('manager.constructionManager'); }
+catch(e){ console.log('[WARN] constructionManager require 失敗:', e && e.message); constructionManager = { run: function(){} }; }
 const energyBalanceManager = require('manager.energyBalanceManager');
 const boostManager = require('manager.boostManager');
 const resourcePlanner = require('manager.resourcePlanner');
@@ -67,6 +70,7 @@ module.exports.loop = function () {
     prof('lab', ()=>labManager.run());
     prof('boost', ()=>boostManager.run());
     prof('resourcePlan', ()=>resourcePlanner.run());
+    prof('construction', ()=>constructionManager.run());
     prof('roi', ()=>roiManager.run());
     prof('road', ()=>roadManager.run());
     prof('energyBalance', ()=>energyBalanceManager.run());

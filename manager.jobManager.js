@@ -29,11 +29,18 @@ function buildGlobalQueue() {
 
     for (const roomName in Game.rooms) {
         const room = Game.rooms[roomName];
-        // 建造
+        // 建造 (依結構型別給不同優先級)
         const sites = room.find(FIND_CONSTRUCTION_SITES);
         for (const site of sites) {
             const key = site.id + '|build';
-            if (!existing.has(key)) queue.push(makeJob('build', roomName, site.id, 5));
+            if (!existing.has(key)) {
+                var cfg = require('util.config');
+                var pmap = cfg.CONSTRUCTION && cfg.CONSTRUCTION.PRIORITY;
+                var st = site.structureType;
+                var base = 5;
+                if (pmap && pmap[st]) base = pmap[st];
+                queue.push(makeJob('build', roomName, site.id, base));
+            }
         }
         // 修理 (不含牆，牆由 defenseManager 漸進處理)
         const repairs = room.find(FIND_STRUCTURES, { filter: s => s.hits < s.hitsMax * 0.5 && s.structureType !== STRUCTURE_WALL });

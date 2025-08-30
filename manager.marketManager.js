@@ -4,7 +4,7 @@
 // 3. 簡單價格過濾：低於設定最小價格不賣
 const log = require('util.log');
 const config = require('util.config');
-const boostManager = require('manager.boostManager');
+const resourcePlanner = require('manager.resourcePlanner');
 
 function run() {
     if (!Memory.market) Memory.market = { priceHistory: {}, ema: {}, lastSample: 0 };
@@ -16,6 +16,7 @@ function run() {
         const terminal = room.terminal;
         handleEnergy(roomName, terminal);
         handleMinerals(roomName, terminal);
+    handleProcurement(roomName, terminal); // (E)
     }
 }
 
@@ -68,7 +69,12 @@ function handleMinerals(roomName, terminal) {
         const qty = terminal.store[res];
     if (qty <= buffer) continue;
     // 若為已預留 boost 資源且剩餘不足預留量 + buffer 則跳過
-    if (boostManager && boostManager.isReserved && boostManager.isReserved(res, qty)) continue;
+    if (resourcePlanner && resourcePlanner.isReserved && resourcePlanner.isReserved(res, qty)) continue;
+    // 若 resourcePlanner 有 demand，僅賣出超出 demand+buffer 的部分
+    const demand = (Memory.resource && Memory.resource.demand && Memory.resource.demand[res]) || 0;
+    const reserved = (Memory.resource && Memory.resource.reserved && Memory.resource.reserved[res]) || 0;
+    const protectedAmount = demand + reserved + buffer;
+    if (qty <= protectedAmount) continue;
         const orders = Game.market.getAllOrders({ type: ORDER_BUY, resourceType: res });
         if (!orders.length) continue;
         orders.sort((a,b)=> b.price - a.price);
@@ -78,7 +84,7 @@ function handleMinerals(roomName, terminal) {
         const recent = hist.slice(-10);
         const avg = recent.length ? recent.reduce((s,v)=>s+v,0)/recent.length : top.price;
         if (top.price < avg * 0.9) continue; // 低於 90% 平均不賣
-        const sellAmount = Math.min(qty - buffer, top.amount, 5000);
+    const sellAmount = Math.min(qty - protectedAmount, top.amount, 5000);
         if (sellAmount < 200) continue;
         const cost = Game.market.calcTransactionCost(sellAmount, roomName, top.roomName);
         if ((terminal.store[RESOURCE_ENERGY]||0) < cost) continue;
@@ -93,3 +99,37 @@ function handleMinerals(roomName, terminal) {
 }
 
 module.exports = { run };
+
+function handleProcurement(roomName, terminal) {
+    if (Game.time % 200 !== 0) return; // 200 tick
+    if (!Memory.resource || !Memory.resource.demand) return;
+    const cfg = config;
+    const demand = Memory.resource.demand;
+    const reserved = (Memory.resource && Memory.resource.reserved) || {};
+    const cap = (cfg.MARKET && cfg.MARKET.BUY_PRICE_CAP) || 3.0;
+    for (const res in demand) {
+        if (res === RESOURCE_ENERGY) continue;
+        const need = demand[res] + (reserved[res]||0);
+        if (need <= 0) continue;
+        let have = (terminal.store[res]||0);
+        if (terminal.room.storage) have += terminal.room.storage.store[res]||0;
+        if (have >= need * 0.5) continue; // 低於 50% 才補
+        const deficit = need - have;
+        if (deficit < 200) continue;
+        const orders = Game.market.getAllOrders({ type: ORDER_SELL, resourceType: res });
+        if (!orders.length) continue;
+        orders.sort((a,b)=> a.price - b.price);
+        const pick = orders.find(o=>o.price <= cap);
+        if (!pick) continue;
+        const amount = Math.min(deficit, pick.remainingAmount, 2000);
+        if (amount < 100) continue;
+        const energyCost = Game.market.calcTransactionCost(amount, roomName, pick.roomName);
+        if ((terminal.store[RESOURCE_ENERGY]||0) < energyCost + 500) continue;
+        const ok = Game.market.deal(pick.id, amount, roomName);
+        if (ok === OK) {
+            if (!Memory.metrics) Memory.metrics = {};
+            if (!Memory.metrics.procure) Memory.metrics.procure = {};
+            Memory.metrics.procure[res] = (Memory.metrics.procure[res]||0) + amount;
+        }
+    }
+}

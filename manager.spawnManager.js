@@ -29,10 +29,11 @@ function run() {
         if (rcl >= 5) target.ranger = 2;
         if (rcl >= 5) target.repairer += 1;
 
-        // 節流 / boost 模式倍率
-        const econMult = economyManager.modeMultiplier(room);
-        target.upgrader = Math.max(1, Math.round(target.upgrader * econMult));
-        target.builder = Math.max(1, Math.round(target.builder * econMult));
+    // (C) 多維經濟模式倍率
+    target.upgrader = Math.max(1, Math.round(target.upgrader * economyManager.modeRoleMultiplier(room,'upgrader')));
+    target.builder = Math.max(1, Math.round(target.builder * economyManager.modeRoleMultiplier(room,'builder')));
+    target.repairer = Math.max(1, Math.round(target.repairer * economyManager.modeRoleMultiplier(room,'repairer')));
+    target.ranger = Math.max(target.ranger, Math.round((target.ranger||0) * economyManager.modeRoleMultiplier(room,'ranger')));
 
         // 戰爭模式增加防禦與運輸
         if (Memory.threat && Memory.threat.warMode) {

@@ -20,6 +20,9 @@ module.exports = {
             const src = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
             if (src && creep.harvest(src) === ERR_NOT_IN_RANGE) creep.moveTo(src);
         } else {
+            // 新增批次類型優先權：labSupplyBatch > refillCluster
+            if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'labSupplyBatch');
+            if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'refillCluster');
             // 若有 haulMineral 工作尚未領取，優先處理
             if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'haulMineral');
             // Lab 卸載 (清空異種) > 補給 > Output 回收
@@ -29,6 +32,50 @@ module.exports = {
             // 若存在專用 refillTerminal job
             if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'refillTerminal');
             const job = creep.memory.jobId && jobManager.getJob(creep.memory.jobId);
+            // 批次補給 (能源多目標)
+            if (job && job.type === 'refillCluster') {
+                // 確保攜帶能源
+                if (creep.store[RESOURCE_ENERGY] === 0) {
+                    const src = creep.room.storage || creep.pos.findClosestByPath(FIND_STRUCTURES,{filter:s=>s.structureType===STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY]>100});
+                    if (src && creep.withdraw(src, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(src);
+                    return; // 取能量階段
+                }
+                if (!job.data._cursor) job.data._cursor = 0;
+                const targets = job.data.targets || [];
+                if (job.data._cursor >= targets.length) { jobManager.completeJob(job.id); delete creep.memory.jobId; return; }
+                const tgt = Game.getObjectById(targets[job.data._cursor]);
+                if (!tgt || !tgt.store || tgt.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+                    job.data._cursor++;
+                    return;
+                }
+                if (creep.transfer(tgt, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(tgt);
+                // 若能源耗盡或目標填滿，移動到下一個
+                if (creep.store[RESOURCE_ENERGY] === 0 || tgt.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+                    job.data._cursor++;
+                }
+                return;
+            }
+            // Lab Supply 批次
+            if (job && job.type === 'labSupplyBatch') {
+                // 當前正在處理第 data._cursor 個 lab
+                if (!job.data._cursor) job.data._cursor = 0;
+                const res = job.data.resource;
+                const storage = Game.getObjectById(job.targetId);
+                const dests = job.data.dests || [];
+                if (job.data._cursor >= dests.length) { jobManager.completeJob(job.id); delete creep.memory.jobId; return; }
+                const destLab = Game.getObjectById(dests[job.data._cursor]);
+                if (!destLab) { job.data._cursor++; return; }
+                // 若手上沒有該資源 → 從 storage withdraw
+                if ((creep.store[res]||0) === 0) {
+                    if (storage && creep.withdraw(storage,res) === ERR_NOT_IN_RANGE) creep.moveTo(storage);
+                    return;
+                }
+                if (creep.transfer(destLab,res) === ERR_NOT_IN_RANGE) creep.moveTo(destLab);
+                if (creep.store[res] === 0 || (destLab.store[res]||0) >= (job.data.amount||1500)) {
+                    job.data._cursor++;
+                }
+                return;
+            }
             if (job && job.type === 'haulMineral') {
                 const tgt = Game.getObjectById(job.targetId);
                 if (!tgt) { jobManager.completeJob(job.id); delete creep.memory.jobId; }

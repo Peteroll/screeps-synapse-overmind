@@ -9,28 +9,43 @@ function run() {
     if (!Memory.roi) Memory.roi = { samples: {}, remotes: {}, cost:0 };
     trackIncome();
     trackCost();
+    if (Game.time % 50 === 0) smooth();
     if (Game.time % 200 === 0) evaluate();
 }
 
 function trackIncome() {
-    // Per remote: 以 remoteHauler 背回的能量增長 (看 creep carry 的 energy 交付到 home storage 時) 需標記來源房間 -> 這裡簡化：當 remoteHauler 在自家 storage 附近 unload 時記錄其 difference。
+    // (B) 精細化：分離 energy / mineral 收益
     if (!Memory.roi.creepLoad) Memory.roi.creepLoad = {};
-    for (const name in Game.creeps) {
-        const c = Game.creeps[name];
+    for (var name in Game.creeps) {
+        var c = Game.creeps[name];
         if (c.memory.role !== 'remoteHauler') continue;
-        const home = c.room.storage && c.room.storage.my ? c.room : null;
+        var home = c.room.storage && c.room.storage.my ? c.room : null;
         if (!home) continue;
-        // 估算其上次負載 - 現在負載的 energy 作為一次交付
-        const key = name;
-        const prev = Memory.roi.creepLoad[key] || { last: c.store.getUsedCapacity(RESOURCE_ENERGY) };
-        const now = c.store.getUsedCapacity(RESOURCE_ENERGY);
-        if (prev.last > now) { // 發生卸貨
-            const delivered = prev.last - now;
-            const remoteRoom = c.memory.remoteRoom || c.memory.sourceRoom || 'unknown';
-            if (!Memory.roi.remotes[remoteRoom]) Memory.roi.remotes[remoteRoom] = { income:0, cost:0 };
-            Memory.roi.remotes[remoteRoom].income += delivered;
+        var key = name;
+        var prev = Memory.roi.creepLoad[key];
+        if (!prev) {
+            prev = { last:{} };
+            for (var r in c.store) prev.last[r] = c.store[r];
         }
-        prev.last = now;
+        var deliveredEnergy = 0, deliveredMineral = 0;
+        for (var res in prev.last) {
+            var before = prev.last[res] || 0;
+            var nowAmt = c.store[res] || 0;
+            if (before > nowAmt) {
+                var diff = before - nowAmt;
+                if (res === RESOURCE_ENERGY) deliveredEnergy += diff; else deliveredMineral += diff;
+            }
+        }
+        if (deliveredEnergy > 0 || deliveredMineral > 0) {
+            var remoteRoom = c.memory.remoteRoom || c.memory.sourceRoom || 'unknown';
+            if (!Memory.roi.remotes[remoteRoom]) Memory.roi.remotes[remoteRoom] = { income:0, cost:0 };
+            var node = Memory.roi.remotes[remoteRoom];
+            node.incomeEnergy = (node.incomeEnergy||0) + deliveredEnergy;
+            node.incomeMineral = (node.incomeMineral||0) + deliveredMineral;
+            node.income += deliveredEnergy + deliveredMineral;
+        }
+        prev.last = {};
+        for (var cur in c.store) prev.last[cur] = c.store[cur];
         Memory.roi.creepLoad[key] = prev;
     }
 }
@@ -55,15 +70,26 @@ function creepCost(body) {
 
 function evaluate() {
     let totalIncome = 0, totalCost = 0;
-    for (const r in Memory.roi.remotes) {
-        const node = Memory.roi.remotes[r];
-        const roi = node.cost > 0 ? node.income / node.cost : 0;
+    for (var r in Memory.roi.remotes) {
+        var node = Memory.roi.remotes[r];
+        var roi = node.cost > 0 ? node.income / node.cost : 0;
+        var roiEnergy = node.cost > 0 ? (node.incomeEnergy||0) / node.cost : 0;
         node.roi = roi;
+        node.roiEnergy = roiEnergy;
+        node.roiEma = node.roiEma === undefined ? roi : (node.roiEma * 0.8 + roi * 0.2);
         totalIncome += node.income; totalCost += node.cost;
-        if (roi < 0.6) {
+        const lowThreshold = 0.6;
+        const recoverThreshold = 0.75;
+        if (node.roiEma < lowThreshold) {
             if (!node.lowSince) node.lowSince = Game.time; else if (Game.time - node.lowSince > 1500) markRemoteLow(r);
-        } else node.lowSince = undefined;
-        // 衰減，使數值不無限成長 (每 200 tick 評估時做輕微 decay)
+            node.recoverSince = undefined;
+        } else if (node.roiEma >= recoverThreshold) {
+            if (node.lowSince) {
+                if (!node.recoverSince) node.recoverSince = Game.time;
+                if (Game.time - node.recoverSince > 1000) clearRemoteLow(r);
+            }
+        }
+        // 衰減
         node.income *= 0.9; node.cost *= 0.9;
     }
     Memory.roi.summary = { income: totalIncome, cost: totalCost, roi: totalCost>0? totalIncome/totalCost:0, lastEval: Game.time };
@@ -76,5 +102,15 @@ function markRemoteLow(roomName) {
         Memory.remotes[roomName].state.lowROI = true;
     }
 }
+
+function clearRemoteLow(roomName) {
+    if (Memory.remotes && Memory.remotes[roomName] && Memory.remotes[roomName].state) {
+        Memory.remotes[roomName].state.lowROI = false;
+    }
+    const node = Memory.roi.remotes[roomName];
+    if (node) { node.lowSince = undefined; node.recoverSince = undefined; }
+}
+
+function smooth() { /* hook for future higher freq smoothing */ }
 
 module.exports = { run };

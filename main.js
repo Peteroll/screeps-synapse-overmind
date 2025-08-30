@@ -2,7 +2,7 @@
 // 新增 managers / roles 模組化。若初次部署仍只有 main.js，請將下列 require 對應檔案加入。
 // 版本常數 (同步 README)
 global.STRATEGY_NAME = 'Synapse Overmind';
-global.STRATEGY_VERSION = '0.8.1';
+global.STRATEGY_VERSION = '0.9.5'; // A-E 完成 (物流合併/ROI精細/多維經濟/Profiler+KPI/主動補貨)
 
 const config = require('util.config');
 const log = require('util.log');
@@ -24,8 +24,10 @@ const expansionManager = require('manager.expansionManager');
 const labManager = require('manager.labManager');
 const roiManager = require('manager.roiManager');
 const roadManager = require('manager.roadManager');
+const logisticsManager = require('manager.logisticsManager'); // A: 物流合併
 const energyBalanceManager = require('manager.energyBalanceManager');
 const boostManager = require('manager.boostManager');
+const resourcePlanner = require('manager.resourcePlanner');
 require('util.movement'); // 會覆寫 moveTo 做快取
 
 const roleMiner = require('role.miner');
@@ -45,25 +47,30 @@ module.exports.loop = function () {
 
     housekeeping();
 
-    // 生成/更新任務 (依房間狀態)
-    taskManager.generateRoomTasks();
-    jobManager.buildGlobalQueue(); // 內含 aging 與加權排序
-    remoteManager.scanFlags();
-    remoteManager.plan();
-    pathCache.run();
-    layoutManager.run();
-    costMatrixManager.recordTraffic();
-    costMatrixManager.run();
-    marketManager.run();
-    terminalManager.run();
-    threatManager.run();
-    economyManager.run();
-    expansionManager.run();
-    labManager.run();
-    boostManager.run();
-    roiManager.run();
-    roadManager.run();
-    energyBalanceManager.run();
+    // (D) Profiler 包裝
+    if (!Memory.profiler) Memory.profiler = { managers:{} };
+    function prof(name, fn){ const b=Game.cpu.getUsed(); try{fn();}catch(e){console.log('[ERR mgr]',name,e.stack||e);} const u=Game.cpu.getUsed()-b; const slot=Memory.profiler.managers[name]||{t:0,c:0}; slot.t+=u; slot.c++; if(slot.c>=50){slot.avg=slot.t/slot.c; slot.t*=0.5; slot.c=Math.max(1,slot.c*0.5);} Memory.profiler.managers[name]=slot; }
+    prof('task', ()=>taskManager.generateRoomTasks());
+    prof('job', ()=>jobManager.buildGlobalQueue());
+    prof('logistics', ()=>logisticsManager.run());
+    prof('remoteScan', ()=>remoteManager.scanFlags());
+    prof('remotePlan', ()=>remoteManager.plan());
+    prof('pathCache', ()=>pathCache.run());
+    prof('layout', ()=>layoutManager.run());
+    prof('trafficRec', ()=>costMatrixManager.recordTraffic());
+    prof('costMatrix', ()=>costMatrixManager.run());
+    prof('market', ()=>marketManager.run());
+    prof('terminal', ()=>terminalManager.run());
+    prof('threat', ()=>threatManager.run());
+    prof('economy', ()=>economyManager.run());
+    prof('expansion', ()=>expansionManager.run());
+    prof('lab', ()=>labManager.run());
+    prof('boost', ()=>boostManager.run());
+    prof('resourcePlan', ()=>resourcePlanner.run());
+    prof('roi', ()=>roiManager.run());
+    prof('road', ()=>roadManager.run());
+    prof('energyBalance', ()=>energyBalanceManager.run());
+    if (Game.time % 200 === 0 && global.scanRoadHealth) global.scanRoadHealth();
 
     // Link 網路
     linkManager.run();
@@ -99,9 +106,18 @@ module.exports.loop = function () {
     hudManager.draw();
 
     const cpuUsed = Game.cpu.getUsed() - startCpu;
-    // 指數平滑 CPU 監控 + 角色統計
+    // 指數平滑 CPU 監控 + 角色統計 + Hauler Idle (D)
     if (!Memory.metrics) Memory.metrics = {};
     Memory.metrics.cpuEma = Memory.metrics.cpuEma === undefined ? cpuUsed : (Memory.metrics.cpuEma * 0.95 + cpuUsed * 0.05);
+    if (!Memory.metrics.hauler) Memory.metrics.hauler = { idle:0,total:0 };
+    for (const hn in Game.creeps) {
+        const hc = Game.creeps[hn];
+        if (hc.memory.role === 'hauler') {
+            Memory.metrics.hauler.total++;
+            if (hc.memory.working && !hc.memory.jobId) Memory.metrics.hauler.idle++;
+        }
+    }
+    if (Memory.metrics.market && Memory.metrics.market.revenue !== undefined && !Memory.metrics.market.start) Memory.metrics.market.start = Game.time;
     if (Game.time % 50 === 0) {
         const roleCount = {};
         for (const name in Game.creeps) {

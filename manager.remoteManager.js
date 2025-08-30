@@ -35,7 +35,7 @@ function plan() {
             meta.state.clearTicks = 0;
             if (meta.state.hostileTicks >= config.INTEL.REMOTE_HOSTILE_SUSPEND_TICKS) meta.state.suspended = true;
         } else if (lowROI) {
-            // ROI 低時保持暫停 (若已連續低 ROI 在 roiManager 中設定)，這裡直接掛起
+            // ROI 低：roiManager 設定 lowROI，這裡維持暫停
             meta.state.suspended = true;
         } else {
             meta.state.clearTicks++;

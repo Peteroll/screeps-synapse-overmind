@@ -67,6 +67,11 @@ HUD 或 Visual 可引用 `global.STRATEGY_NAME` 統一顯示。
 | 0.8.0 | 2025-08-30 | 高流量道路自動補建 / 跨房能量平衡 / Boost 管線整合 / ROI 與遠程暫停互鎖 |
 | 0.8.1 | 2025-08-30 | HUD 礦物剩餘/再生顯示 / mineralMiner 枯竭轉職或回收 |
 | 0.9.0 | 2025-08-30 | 通用 Boost Manager / 多層反應鏈排程 / labUnload 卸載 / 部件級需求估算 |
+| 0.9.1 | 2025-08-30 | 物流合併：refillCluster 多結構補能 / labSupplyBatch 批次補給 (降低往返) |
+| 0.9.2 | 2025-08-30 | ROI 精細化：Energy / Mineral 拆分 roiEnergy 指標 |
+| 0.9.3 | 2025-08-30 | 經濟多維：buildRush / upgradeRush / boost 模式動態倍率 |
+| 0.9.4 | 2025-08-30 | Profiler + HUD KPI (harvestRate / upgradeRate / haulerIdle% / marketRev1k) |
+| 0.9.5 | 2025-08-30 | 市場主動補貨 (需求缺口 <50% 自動買入) |
 
 語義版號：MAJOR.MINOR.PATCH（現階段 API 未凍結）。
 
@@ -119,7 +124,7 @@ Added cross-room intel (hostileCount, energyStored, mineralType), remote suspens
 `Memory.defense.wallTarget`：當前牆/堡目標 hits
 `layout.ramparts`：規劃的環型防禦座標 (cache 於 Memory.roomLayout)
 
-## 新增邏輯摘要 (0.3.0 ~ 0.9.0)
+## 新增邏輯摘要 (0.3.0 ~ 0.9.5)
 
 1. threatManager 更新 intel 並維護總威脅
 2. remoteManager 依 intel 將遠程房間 suspended= true/false
@@ -138,6 +143,11 @@ Added cross-room intel (hostileCount, energyStored, mineralType), remote suspens
 15. (0.8.0) ROI 與 remoteManager：低 ROI 長期標記 suspended
 16. (0.8.1) HUD mineral 剩餘量/再生倒數；mineral 枯竭後 mineralMiner >300 TTL 轉 upgrader 否則 recycle
 17. (0.9.0) Boost 一般化：自動角色請求 / 反應圖遞迴排程 / labUnload 卸載異種 / 部件級需求推估 / 達需求動態切換
+18. (0.9.1) 物流合併：refillCluster / labSupplyBatch 減少往返
+19. (0.9.2) ROI 拆分 energy / mineral 收益 (roiEnergy)
+20. (0.9.3) 經濟多維模式：buildRush / upgradeRush / boost
+21. (0.9.4) Profiler + HUD KPI 指標
+22. (0.9.5) 市場主動補貨 BUY_PRICE_CAP 控制成本
 
 ## 後續 Roadmap 方向
 

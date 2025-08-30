@@ -16,7 +16,8 @@ module.exports = {
     MARKET: {
         ENERGY_MIN_PRICE: 0.7, // 低於不賣 (僅參考，不硬性)
         MINERAL_DEFAULT_BUFFER: 3000, // 每種礦物保留量
-        MINERAL_DEFAULT_MIN_PRICE: 0.6 // 低於此價格暫不出售
+    MINERAL_DEFAULT_MIN_PRICE: 0.6, // 低於此價格暫不出售
+    BUY_PRICE_CAP: 3.0 // (E) 主動補貨上限價
     },
     INTEL: {
         REMOTE_HOSTILE_SUSPEND_TICKS: 50, // 連續看到敵人多少 tick 暫停該 remote
@@ -47,6 +48,7 @@ module.exports = {
             miner: [],
             upgrader: ['XGHO2']
         },
-        BOOST_PART_COST: 30 // 每部件消耗 30 單位 (標準規則)
+    BOOST_PART_COST: 30, // 每部件消耗 30 單位 (標準規則)
+    SAFETY_STOCK_RATIO: 0.3 // 中間產物/目標需求的安全庫存比例
     }
 };

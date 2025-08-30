@@ -38,3 +38,22 @@ function maintain(room) {
 }
 
 module.exports = { run };
+
+// 未來可加入：路 decay 預測 -> repair job 前置 (暫放這裡做示意)
+if (!global.__roadDecayHookInstalled) {
+    global.__roadDecayHookInstalled = true;
+    global.scanRoadHealth = function() {
+        for (const roomName in Game.rooms) {
+            const room = Game.rooms[roomName];
+            if (!room.controller || !room.controller.my) continue;
+            const roads = room.find(FIND_STRUCTURES,{filter:s=>s.structureType===STRUCTURE_ROAD});
+            for (const r of roads) {
+                if (r.hits < r.hitsMax * 0.25) {
+                    if (!Memory.jobs) Memory.jobs = { queue: [] };
+                    const key = 'repair_'+r.id;
+                    if (!Memory.jobs.queue.some(j=>j.id===key)) Memory.jobs.queue.push({ id:key, type:'repair', room:room.name, targetId:r.id, priority:7, dynamicPriority:7, data:{}, age:0 });
+                }
+            }
+        }
+    };
+}

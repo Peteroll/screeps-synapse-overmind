@@ -17,7 +17,8 @@ function draw() {
                 mStr = `${mineral.mineralType}:regen${mineral.ticksToRegeneration}`;
             }
         }
-        room.visual.text(`E:${(econ && econ.energy)||0} ${econ?econ.mode:''} T:${threat} ${war} ${mStr}`, 1, 1, {align:'left',opacity:0.8,font:0.7});
+    const cpu = Memory.metrics && Memory.metrics.cpuEma ? Memory.metrics.cpuEma.toFixed(1) : '-';
+    room.visual.text(`v${global.STRATEGY_VERSION} E:${(econ && econ.energy)||0} ${econ?econ.mode:''} T:${threat} ${war} ${mStr} CPU:${cpu}` , 1, 1, {align:'left',opacity:0.85,font:0.7});
     }
 }
 module.exports = { draw };

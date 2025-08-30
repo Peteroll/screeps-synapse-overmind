@@ -1,5 +1,8 @@
 // ========= 全自動主迴圈 =========
 // 新增 managers / roles 模組化。若初次部署仍只有 main.js，請將下列 require 對應檔案加入。
+// 版本常數 (同步 README)
+global.STRATEGY_NAME = 'Synapse Overmind';
+global.STRATEGY_VERSION = '0.8.1';
 
 const config = require('util.config');
 const log = require('util.log');
@@ -22,6 +25,7 @@ const labManager = require('manager.labManager');
 const roiManager = require('manager.roiManager');
 const roadManager = require('manager.roadManager');
 const energyBalanceManager = require('manager.energyBalanceManager');
+const boostManager = require('manager.boostManager');
 require('util.movement'); // 會覆寫 moveTo 做快取
 
 const roleMiner = require('role.miner');
@@ -56,6 +60,7 @@ module.exports.loop = function () {
     economyManager.run();
     expansionManager.run();
     labManager.run();
+    boostManager.run();
     roiManager.run();
     roadManager.run();
     energyBalanceManager.run();
@@ -93,9 +98,20 @@ module.exports.loop = function () {
 
     hudManager.draw();
 
+    const cpuUsed = Game.cpu.getUsed() - startCpu;
+    // 指數平滑 CPU 監控 + 角色統計
+    if (!Memory.metrics) Memory.metrics = {};
+    Memory.metrics.cpuEma = Memory.metrics.cpuEma === undefined ? cpuUsed : (Memory.metrics.cpuEma * 0.95 + cpuUsed * 0.05);
+    if (Game.time % 50 === 0) {
+        const roleCount = {};
+        for (const name in Game.creeps) {
+            const r = Game.creeps[name].memory.role || 'unknown';
+            roleCount[r] = (roleCount[r] || 0) + 1;
+        }
+        Memory.metrics.roles = roleCount;
+    }
     if (Game.time % config.LOG_TICK_INTERVAL === 0) {
-        var cpuUsed = (Game.cpu.getUsed() - startCpu).toFixed(2);
-        log.info('Tick ' + Game.time + ' CPU:' + cpuUsed + ' bucket:' + Game.cpu.bucket + ' warMode:' + (Memory.threat && Memory.threat.warMode ? 'ON' : 'off'));
+        log.info(`Tick ${Game.time} CPU:${cpuUsed.toFixed(2)} avg:${(Memory.metrics.cpuEma||0).toFixed(2)} bucket:${Game.cpu.bucket} warMode:${(Memory.threat && Memory.threat.warMode ? 'ON' : 'off')}`);
     }
 };
 

@@ -24,8 +24,8 @@ function buildGlobalQueue() {
         if (job.assigned && job.age > 1500) job.assigned = null;
     }
 
-    // 已存在 job 的 targetId 做索引避免重複
-    const existing = new Set(queue.map(j => j.targetId + '|' + j.type));
+    // 已存在 job 的 targetId 做索引避免重複 (含 data.dest)
+    const existing = new Set(queue.map(j => (j.targetId||'') + '|' + j.type + '|' + (j.data && j.data.dest || '')));
 
     for (const roomName in Game.rooms) {
         const room = Game.rooms[roomName];
@@ -38,20 +38,20 @@ function buildGlobalQueue() {
         // 修理 (不含牆，牆由 defenseManager 漸進處理)
         const repairs = room.find(FIND_STRUCTURES, { filter: s => s.hits < s.hitsMax * 0.5 && s.structureType !== STRUCTURE_WALL });
         for (const s of repairs) {
-            const key = s.id + '|repair';
+            const key = s.id + '|repair|';
             if (!existing.has(key)) queue.push(makeJob('repair', roomName, s.id, 4));
         }
         // Tower 補能
         const towers = room.find(FIND_MY_STRUCTURES, { filter: s => s.structureType === STRUCTURE_TOWER && s.store.getFreeCapacity(RESOURCE_ENERGY) > 300 });
         for (const t of towers) {
-            const key = t.id + '|refill';
+            const key = t.id + '|refill|';
         if (!existing.has(key)) queue.push(makeJob('refill', roomName, t.id, 6));
         }
         // Terminal 補能任務 (外部 terminalManager 可能已 push 但補一層避免漏)
         if (room.terminal && room.storage) {
             const termNeed =  (room.terminal.store[RESOURCE_ENERGY] || 0) < 25000;
             if (termNeed) {
-                const key = room.terminal.id + '|refillTerminal';
+                const key = room.terminal.id + '|refillTerminal|';
                 if (!existing.has(key)) queue.push(makeJob('refillTerminal', roomName, room.terminal.id, 4));
             }
         }
@@ -60,12 +60,12 @@ function buildGlobalQueue() {
         if (mineral) {
             const cont = mineral.pos.findInRange(FIND_STRUCTURES,1,{filter:s=>s.structureType===STRUCTURE_CONTAINER && s.store.getUsedCapacity() > 200})[0];
             if (cont) {
-                const key = cont.id + '|haulMineral';
+                const key = cont.id + '|haulMineral|';
                 if (!existing.has(key)) queue.push(makeJob('haulMineral', roomName, cont.id, 3));
             }
             const drops = mineral.pos.findInRange(FIND_DROPPED_RESOURCES,2,{filter:r=>r.resourceType!==RESOURCE_ENERGY && r.amount>100});
             for (const d of drops) {
-                const key = d.id + '|haulMineral';
+                const key = d.id + '|haulMineral|';
                 if (!existing.has(key)) queue.push(makeJob('haulMineral', roomName, d.id, 3));
             }
         }

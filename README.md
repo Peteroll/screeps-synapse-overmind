@@ -1,7 +1,7 @@
 # Synapse Overmind – Screeps 全自動策略框架
 
 [![Strategy](https://img.shields.io/badge/strategy-Synapse%20Overmind-6cf)](#策略名稱與嵌入)
-[![Version](https://img.shields.io/badge/version-0.8.1-blue)](#版本)
+[![Version](https://img.shields.io/badge/version-0.9.0-blue)](#版本)
 [![Screeps](https://img.shields.io/badge/screeps-live-green)](https://screeps.com)
 [![License](https://img.shields.io/badge/license-Custom-lightgrey)](#授權)
 [![Language](https://img.shields.io/badge/lang-%E4%B8%AD%E8%8B%B1%E9%9B%99%E8%AA%9E-orange)](#english-summary-new-features-addendum)
@@ -51,7 +51,7 @@ HUD 或 Visual 可引用 `global.STRATEGY_NAME` 統一顯示。
 - Expansion BFS 掃描 + 評分 + 自動旗標 + Pioneer
 - 跨房能量平衡 (Terminal send) (新)
 - ROI 追蹤 (遠程收益/成本 + 低 ROI 自動暫停) (新)
-- Ranger Boost Pipeline (基礎) (新)
+- Ranger Boost Pipeline → 通用 Boost 佇列 / 多礦反應排程 / 部件精準需求 (新)
 
 ## 版本
 
@@ -66,6 +66,7 @@ HUD 或 Visual 可引用 `global.STRATEGY_NAME` 統一顯示。
 | 0.7.0 | 2025-08-30 | ROI 每遠程收益/成本細化 & 低 ROI 自動暫停 / Ranger 基礎 Boost 流程 |
 | 0.8.0 | 2025-08-30 | 高流量道路自動補建 / 跨房能量平衡 / Boost 管線整合 / ROI 與遠程暫停互鎖 |
 | 0.8.1 | 2025-08-30 | HUD 礦物剩餘/再生顯示 / mineralMiner 枯竭轉職或回收 |
+| 0.9.0 | 2025-08-30 | 通用 Boost Manager / 多層反應鏈排程 / labUnload 卸載 / 部件級需求估算 |
 
 語義版號：MAJOR.MINOR.PATCH（現階段 API 未凍結）。
 
@@ -102,7 +103,7 @@ HUD 或 Visual 可引用 `global.STRATEGY_NAME` 統一顯示。
 
 維運 / 可視化
 
-- HUD 顯示模式/威脅/能量/礦物(剩餘或再生倒數) (新)
+- HUD 顯示模式/威脅/能量/礦物(剩餘或再生倒數) / 平滑 CPU / 版本 (新)
 - pathCache / traffic heat 衰減
 - Hostile Profile 記錄最大攻擊輸出
 
@@ -118,7 +119,7 @@ Added cross-room intel (hostileCount, energyStored, mineralType), remote suspens
 `Memory.defense.wallTarget`：當前牆/堡目標 hits
 `layout.ramparts`：規劃的環型防禦座標 (cache 於 Memory.roomLayout)
 
-## 新增邏輯摘要 (0.3.0 ~ 0.8.1)
+## 新增邏輯摘要 (0.3.0 ~ 0.9.0)
 
 1. threatManager 更新 intel 並維護總威脅
 2. remoteManager 依 intel 將遠程房間 suspended= true/false
@@ -136,6 +137,7 @@ Added cross-room intel (hostileCount, energyStored, mineralType), remote suspens
 14. (0.8.0) energyBalanceManager：富餘 → 匱乏 房 Terminal 自動能量送貨
 15. (0.8.0) ROI 與 remoteManager：低 ROI 長期標記 suspended
 16. (0.8.1) HUD mineral 剩餘量/再生倒數；mineral 枯竭後 mineralMiner >300 TTL 轉 upgrader 否則 recycle
+17. (0.9.0) Boost 一般化：自動角色請求 / 反應圖遞迴排程 / labUnload 卸載異種 / 部件級需求推估 / 達需求動態切換
 
 ## 後續 Roadmap 方向
 

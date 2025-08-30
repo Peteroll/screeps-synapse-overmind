@@ -22,9 +22,9 @@ module.exports = {
         } else {
             // 若有 haulMineral 工作尚未領取，優先處理
             if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'haulMineral');
-            // Lab 補給優先度次之
+            // Lab 卸載 (清空異種) > 補給 > Output 回收
+            if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'labUnload');
             if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'labSupply');
-            // Output 回收
             if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'labPickup');
             // 若存在專用 refillTerminal job
             if (!creep.memory.jobId) jobManager.claimJob(creep, j => j.type === 'refillTerminal');
@@ -97,6 +97,25 @@ module.exports = {
                             }
                         }
                         if (lab.store[res] < 200) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                    }
+                }
+                return;
+            }
+            if (job && job.type === 'labUnload') {
+                const lab = Game.getObjectById(job.targetId);
+                if (!lab || !lab.mineralType || lab.store[lab.mineralType] === 0) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
+                else {
+                    const res = job.data.resource || lab.mineralType;
+                    if (creep.store.getFreeCapacity() > 0 && lab.store[res] > 0) {
+                        if (creep.withdraw(lab,res) === ERR_NOT_IN_RANGE) creep.moveTo(lab);
+                    } else {
+                        if (creep.room.storage) {
+                            for (const r in creep.store) {
+                                if (creep.transfer(creep.room.storage,r) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.storage);
+                                break;
+                            }
+                        }
+                        if (lab.store[res] === 0) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
                     }
                 }
                 return;

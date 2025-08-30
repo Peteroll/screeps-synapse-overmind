@@ -34,6 +34,19 @@ module.exports = {
         PRIMARY_REACTION: 'XKHO2', // 示意主要生成的 boost (Ranged Attack Boost)
         REAGENT_MIN: 1000, // 若 input lab 低於此量則補給
         REAGENT_BATCH: 1500, // 每次補給目標
-        OUTPUT_PICKUP: 1500 // 產物達到此量建立回收任務
+        OUTPUT_PICKUP: 1500, // 產物達到此量建立回收任務
+        REACTION_GRAPH: { // 簡化反應圖 (僅展開到 T3 範例，可自行擴充)
+            XKHO2: ['X','KHO2'], KHO2: ['KO2','H'], KO2:['K','O2'], X:['X','X'], // X 為終端購買或已有庫存 placeholder
+            XLHO2: ['X','LHO2'], LHO2:['LO2','H'], LO2:['L','O2'],
+            XGHO2: ['X','GHO2'], GHO2:['GO2','H'], GO2:['G','O2']
+        },
+        BOOST_PLAN: { // 指定角色類型對應期望 boost 清單 (優先序)
+            ranger: ['XKHO2'],
+            repairer: ['XLHO2'],
+            hauler: [],
+            miner: [],
+            upgrader: ['XGHO2']
+        },
+        BOOST_PART_COST: 30 // 每部件消耗 30 單位 (標準規則)
     }
 };

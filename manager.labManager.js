@@ -1,14 +1,20 @@
-// Lab 反應與 Boost 管理 (基礎版本)
-// 功能: 
-// 1. 維護核心 PRIMARY_REACTION 連鎖 (僅處理二階/三階簡化: XKHO2)
-// 2. Input Labs 補給、Output Lab 產物回收 → 建立 haulMineral job (重用 hauler 流程)
-// 3. 預留 boost 給 ranger (示意) 並依需求對特定角色提出 boost 任務
-// 
-// 反應鏈 (示例 XKHO2): X + KHO2 -> XKHO2，需要 KHO2: KO2 + H => K + OH => 等完整鏈極長，此處簡化為直接假設已有 X 與 KHO2 庫存
-// 實務可擴展 reactionGraph。
+// Lab 反應管理 (進階排程版)
+// 功能:
+// 1. 依 BOOST_PLAN 自動決定近期需要的高階 boost 產物列表 (優先序)。
+// 2. 針對計劃產物遞迴展開 REACTION_GRAPH 取得基底 reagents 需求，生成 Reaction Queue。
+// 3. 每房根據可用 labs (>=3) 指派兩座 input labs 與多座 output labs 連續生產。
+// 4. 輸入 lab 資源不足時建立 labSupply job，output 達閾值建立 labPickup job。
+// 5. 計算未來 boost 需求精準預留：依角色 body 未 boost 的對應部件數量 * 30。
+// 6. 若庫存欠缺中間產物，排程先行合成 (拓撲順序)。
+// 7. 具體策略簡化：一次僅鎖定當前 highestPriority 產物；若其前置缺貨 → 轉產前置。
 
 const config = require('util.config');
 const jobManager = require('manager.jobManager');
+
+function ensureMemory(room) {
+    if (!room.memory.labs) room.memory.labs = { current: undefined, stage: 'select', lastSwitch: 0 };
+    return room.memory.labs;
+}
 
 // 簡化: 尋找 labs: 兩座當作 reagents (前兩個) 其餘為 output
 function classifyLabs(room) {
@@ -31,28 +37,124 @@ function run() {
         if (room.controller.level < 6) continue;
         const cls = classifyLabs(room);
         if (!cls) continue;
+        const mem = ensureMemory(room);
         const { reagentA, reagentB, outputs } = cls;
 
-        // 決定反應主題
-        const product = config.LAB.PRIMARY_REACTION; // XKHO2
+        // 選擇目標產物
+        selectTarget(room, mem);
 
-        // Lab 反應: 所有 output labs 嘗試 runReaction(reagentA,reagentB)
-        for (const out of outputs) {
-            if (reagentA.mineralType && reagentB.mineralType) {
-                out.runReaction(reagentA, reagentB);
-            }
-        }
+        if (!mem.current) continue;
+        const targetProduct = mem.current;
 
-        // 補給 reagent labs (目標保持 >= REAGENT_BATCH)
+        // 決定當前需要合成的 immediate product (可能是 targetProduct 或其前置)
+        const product = chooseImmediateProduct(room, targetProduct);
+
+        // 若 input labs 還沒被裝載對應 reagent -> 發補給工作
         if (room.storage) {
-            ensureReagent(room, reagentA, product);
-            ensureReagent(room, reagentB, product);
+            supplyReagents(room, reagentA, reagentB, product);
         }
 
-        // Output 收集 (若 output lab 某 mineral 達到閾值 建立 haulMineral job 模式：透過 container 模式 -> 這裡直接新增特別 job 類型 'labPickup')
-    handleOutput(room, outputs);
-    handleBoostRequests(room, outputs);
+        // 執行反應
+        for (const out of outputs) {
+            if (reagentA.mineralType && reagentB.mineralType) out.runReaction(reagentA, reagentB);
+        }
+
+        handleOutput(room, outputs);
     }
+}
+
+function selectTarget(room, mem) {
+    if (mem.current && Game.time - mem.lastSwitch < 500) return; // 500 tick 才檢查切換一次
+    const plan = config.LAB.BOOST_PLAN;
+    const priorities = Object.values(plan).flat();
+    // 去重保留順序
+    const unique = [...new Set(priorities)];
+    for (const prod of unique) {
+        // 若庫存低於預留需求則選它
+        const need = projectedNeed(prod);
+        const have = totalStore(room, prod);
+        if (have < need) {
+            mem.current = prod; mem.lastSwitch = Game.time; return;
+        }
+    }
+    // 全部充足 → 不設定
+    mem.current = undefined;
+}
+
+function projectedNeed(product) {
+    // 依 boost 產物對應部件計算需求 (只計算尚未 boost 的目標部件)
+    const partMap = {
+        XKHO2: RANGED_ATTACK,
+        XLHO2: WORK,
+        XGHO2: MOVE
+    };
+    const partType = partMap[product];
+    if (!partType) return 0;
+    const costPer = config.LAB.BOOST_PART_COST || 30;
+    let need = 0;
+    for (const name in Game.creeps) {
+        const c = Game.creeps[name];
+        if (c.memory.boosted) continue;
+        const plan = config.LAB.BOOST_PLAN[c.memory.role];
+        if (!plan || plan.indexOf(product) === -1) continue;
+        const partsNotBoosted = c.body.filter(p => (p.type||p) === partType && !p.boost).length;
+        need += partsNotBoosted * costPer;
+    }
+    return need;
+}
+
+function totalStore(room, mineral) {
+    let sum = 0;
+    if (room.storage) sum += room.storage.store[mineral] || 0;
+    if (room.terminal) sum += room.terminal.store[mineral] || 0;
+    const labs = room.find(FIND_MY_STRUCTURES,{filter:s=>s.structureType===STRUCTURE_LAB});
+    for (const l of labs) if (l.mineralType === mineral) sum += l.store[mineral] || 0;
+    return sum;
+}
+
+function chooseImmediateProduct(room, target) {
+    // 若 target 前置缺 → 先製前置，廣度往下直到找到第一個缺少的中間產物
+    const graph = config.LAB.REACTION_GRAPH || {};
+    const chain = expandChain(target, graph);
+    for (let i = chain.length -1; i >=0; i--) { // 從最底層往上找第一個短缺的
+        const node = chain[i];
+        const have = totalStore(room, node);
+        if (have < projectedNeed(target) * 0.5) return node; // 臨界值：目標需求一半以下視為缺
+    }
+    return target;
+}
+
+function expandChain(product, graph, acc=[]) {
+    if (!graph[product]) return acc.concat([product]);
+    const reagents = graph[product];
+    let res = acc.concat([product]);
+    for (const r of reagents) res = expandChain(r, graph, res);
+    return res;
+}
+
+function supplyReagents(room, labA, labB, product) {
+    const graph = config.LAB.REACTION_GRAPH || {};
+    const reagents = graph[product];
+    if (!reagents || reagents.length < 2) return; // 非可合成或原礦 (X placeholder)
+    ensureReagentType(room, labA, reagents[0]);
+    ensureReagentType(room, labB, reagents[1]);
+}
+
+function ensureReagentType(room, lab, type) {
+    const targetMin = config.LAB.REAGENT_MIN;
+    const batch = config.LAB.REAGENT_BATCH;
+    if (lab.mineralType && lab.mineralType !== type && lab.store[lab.mineralType] > 0) {
+        // 建立卸載任務
+        if (!Memory.jobs) Memory.jobs = { queue: [] };
+        const keyUnload = 'labUnload_'+lab.id+'_'+lab.mineralType;
+        if (!Memory.jobs.queue.some(j=>j.id===keyUnload)) Memory.jobs.queue.push({ id:keyUnload, type:'labUnload', room:room.name, targetId:lab.id, priority:7, dynamicPriority:7, data:{ resource: lab.mineralType }, age:0 });
+        return;
+    }
+    if (lab.mineralType === type && lab.store[type] >= targetMin) return;
+    if (!(room.storage && (room.storage.store[type]||0) > batch)) return;
+    if (!Memory.jobs) Memory.jobs = { queue: [] };
+    const key = 'labSupply_'+lab.id+'_'+type;
+    if (!Memory.jobs.queue.some(j=>j.id===key)) Memory.jobs.queue.push({ id:key, type:'labSupply', room:room.name, targetId:room.storage.id, priority:6, dynamicPriority:6, data:{ dest:lab.id, resource:type, amount:batch }, age:0 });
 }
 
 function ensureReagent(room, lab, product) {
@@ -98,32 +200,5 @@ function handleOutput(room, outputs) {
 }
 
 // 角色 boost 請求 (簡化)：ranger 若未 boost 且房間有對應 mineral (XKHO2) 則標記並指派第一個輸出 lab 做 boost
-function handleBoostRequests(room, outputs) {
-    if (!outputs.length) return;
-    const mineral = config.LAB.PRIMARY_REACTION; // 假設產物即想要 boost 資源
-    const outputLab = outputs.find(l=> l.mineralType === mineral && l.store[mineral] >= 30); // 足夠一次 boost
-    if (!outputLab) return;
-    for (const name in Game.creeps) {
-        const c = Game.creeps[name];
-        if (c.memory.role !== 'ranger') continue;
-        if (c.room.name !== room.name) continue;
-        if (c.memory.boosted) continue;
-        // 發出 boost 任務: creep 前往 lab.runBoost()
-        c.memory.boostTarget = outputLab.id;
-    }
-    // 讓有 boostTarget 的 creep 嘗試執行 (由 movement 呼叫不便，這裡直接介入)
-    for (const name in Game.creeps) {
-        const c = Game.creeps[name];
-        if (!c.memory.boostTarget) continue;
-        const lab = Game.getObjectById(c.memory.boostTarget);
-        if (!lab || !lab.mineralType) { delete c.memory.boostTarget; continue; }
-        if (c.pos.isNearTo(lab)) {
-            const res = lab.boostCreep(c);
-            if (res === OK) { c.memory.boosted = true; delete c.memory.boostTarget; }
-        } else {
-            c.moveTo(lab, { visualizePathStyle:{stroke:'#ffaa00'} });
-        }
-    }
-}
 
 module.exports = { run };

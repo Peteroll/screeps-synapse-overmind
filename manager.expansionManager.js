@@ -3,10 +3,25 @@
 
 function run() {
     if (!Memory.expansion) Memory.expansion = { lastScan:0, candidates:[] };
+    // 手動 comehere 旗標優先
+    let manualFlag = null;
+    for (const fname in Game.flags) {
+        if (fname === 'comehere' || fname.startsWith('comehere:')) { manualFlag = Game.flags[fname]; break; }
+    }
+    if (manualFlag) {
+        Memory.expansion.manual = true;
+        Memory.expansion.manualFlag = manualFlag.name;
+        Memory.expansion.target = manualFlag.pos.roomName;
+        Memory.expansion.lastScan = Game.time;
+        return;
+    } else if (Memory.expansion.manual) {
+        Memory.expansion.manual = false;
+        Memory.expansion.manualFlag = null;
+    }
     if (Game.time - Memory.expansion.lastScan < 2000) return; // 節流
     const myRooms = Object.values(Game.rooms).filter(r => r.controller && r.controller.my);
     if (!myRooms.length) return;
-    const origin = myRooms[0]; // 簡化以第一個房為中心
+    const origin = myRooms[0];
     const nearby = findNearbyRooms(origin.name, 5);
     const candidates = [];
     for (const rn of nearby) {
@@ -21,9 +36,7 @@ function run() {
     Memory.expansion.candidates = candidates.slice(0,10);
     Memory.expansion.target = candidates[0] && candidates[0].roomName;
     Memory.expansion.lastScan = Game.time;
-    // 自動放置擴張旗標 (若無現有旗標)
     if (Memory.expansion.target && !Game.flags['expand:' + Memory.expansion.target]) {
-        // 嘗試在可視房間邊界放旗標 (若有視野)
         const vis = Game.rooms[Memory.expansion.target];
         if (vis) vis.createFlag(25,25,'expand:' + Memory.expansion.target);
     }

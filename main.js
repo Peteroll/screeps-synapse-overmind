@@ -2,7 +2,7 @@
 // 新增 managers / roles 模組化。若初次部署仍只有 main.js，請將下列 require 對應檔案加入。
 // 版本常數 (同步 README)
 global.STRATEGY_NAME = 'Synapse Overmind';
-global.STRATEGY_VERSION = '0.9.6'; // 自動建設策略 (優先級+動態builder需求)
+global.STRATEGY_VERSION = '0.9.7'; // comehere 手動拓殖 + Settler
 
 const config = require('util.config');
 const log = require('util.log');
@@ -44,6 +44,7 @@ const roleRemoteMiner = require('role.remoteMiner');
 const roleRemoteHauler = require('role.remoteHauler');
 const rolePioneer = require('role.pioneer');
 const roleMineralMiner = require('role.mineralMiner');
+const roleSettler = require('role.settler');
 
 module.exports.loop = function () {
     const startCpu = Game.cpu.getUsed();
@@ -98,6 +99,7 @@ module.exports.loop = function () {
             case 'reserver': roleReserver.run(creep); break;
             case 'remoteMiner': roleRemoteMiner.run(creep); break;
             case 'remoteHauler': roleRemoteHauler.run(creep); break;
+            case 'settler': roleSettler.run(creep); break;
             case 'pioneer': rolePioneer.run(creep); break;
             case 'mineralMiner': roleMineralMiner.run(creep); break;
             default:

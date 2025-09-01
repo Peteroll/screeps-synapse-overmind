@@ -73,6 +73,7 @@ HUD 或 Visual 可引用 `global.STRATEGY_NAME` 統一顯示。
 | 0.9.4 | 2025-08-30 | Profiler + HUD KPI (harvestRate / upgradeRate / haulerIdle% / marketRev1k) |
 | 0.9.5 | 2025-08-30 | 市場主動補貨 (需求缺口 <50% 自動買入) |
 | 0.9.6 | 2025-08-30 | 自動建設策略：建造優先級 + 動態 builder 需求估算 |
+| 0.9.7 | 2025-09-01 | comehere 手動拓殖旗標 + Settler 角色 (CLAIM 拓殖) |
 
 語義版號：MAJOR.MINOR.PATCH（現階段 API 未凍結）。
 

@@ -80,12 +80,11 @@ function run() {
             }
         }
 
-        const order = ['miner', 'hauler', 'upgrader', 'builder', 'repairer', 'ranger', 'reserver', 'remoteMiner', 'remoteHauler', 'pioneer', 'mineralMiner'];
-        // Pioneer 需求：若存在 expansion target 且該房未被我方控制 -> 1
+        const order = ['miner', 'hauler', 'upgrader', 'builder', 'repairer', 'ranger', 'reserver', 'remoteMiner', 'remoteHauler', 'settler', 'pioneer', 'mineralMiner'];
         if (Memory.expansion && Memory.expansion.target) {
             const targetRoom = Memory.expansion.target;
             const owned = Game.rooms[targetRoom] && Game.rooms[targetRoom].controller && Game.rooms[targetRoom].controller.my;
-            if (!owned) target.pioneer = 1;
+            if (!owned) target.settler = 1;
         }
         for (const role of order) {
             if ((counts[role] || 0) < (target[role] || 0)) {
@@ -130,6 +129,7 @@ function buildDynamicBody(role, energyCap) {
     case 'remoteMiner': pattern = [WORK, WORK, MOVE]; maxRepeat = 5; break;
     case 'remoteHauler': pattern = [CARRY, CARRY, MOVE]; maxRepeat = 10; break;
     case 'pioneer': pattern = [WORK, CARRY, MOVE]; maxRepeat = 8; break;
+    case 'settler': pattern = [CLAIM, WORK, CARRY, MOVE, MOVE]; maxRepeat = 1; break;
     case 'mineralMiner': pattern = [WORK, WORK, MOVE]; maxRepeat = 5; break;
         default: pattern = [WORK, CARRY, MOVE];
     }

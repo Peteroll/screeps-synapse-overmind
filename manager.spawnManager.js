@@ -12,13 +12,45 @@ function run() {
 
         // 統計現有角色
         const counts = countRoles();
+        const totalCreeps = Object.keys(Game.creeps).length;
+
+        // === 災後復原 / Bootstrap 模式 ===
+        // 觸發條件：完全沒有 creep，或記憶仍標記 active
+        if (totalCreeps === 0) {
+            if (!Memory.bootstrap) Memory.bootstrap = {}; 
+            Memory.bootstrap.active = true; 
+            Memory.bootstrap.since = Game.time;
+        }
+        if (Memory.bootstrap && Memory.bootstrap.active) {
+            // 嘗試產生 pioneer (具 harvest + carry + build 能力) 直到有 miner+hauler 或總數>=4
+            const pioneerNeed = (counts.pioneer || 0) < 2 && (counts.miner||0) === 0 && (counts.hauler||0) === 0;
+            if (pioneerNeed) {
+                const body = buildPioneerBody(room.energyAvailable);
+                if (trySpawn(spawn, 'pioneer', body)) continue; // 成功後等下一 tick
+            }
+            // 離開條件：已有至少 1 miner + 1 hauler 或總數 >= 4
+            if ((counts.miner||0) > 0 && (counts.hauler||0) > 0 || totalCreeps >= 4) {
+                Memory.bootstrap.active = false;
+                Memory.bootstrap.recovered = Game.time;
+            } else {
+                // 在 bootstrap 未退出前，不進行後續正常流程 (避免浪費 CPU/錯誤配額)
+                // 但仍會執行緊急 miner/hauler 判斷 (下方)
+            }
+        }
+
+        // 無 creep 且能量 <100 → 無法組成含 WORK 的最小單位，直接等待 (避免刷 log)
+        if (totalCreeps === 0 && room.energyAvailable < 100) {
+            if (Game.time % 50 === 0) log.warn(`[Bootstrap] 能量不足 (${room.energyAvailable}) 無法生產任何帶 WORK 的單位，等待自然累積`);
+            continue;
+        }
 
         // 緊急：無 miner or 無 hauler → 先造緊急工人
-        if (counts.miner === 0) {
-            if (trySpawn(spawn, 'miner', [WORK, WORK, MOVE])) continue;
+        // (原本使用 counts.miner === 0 若 undefined 不會觸發，導致全滅後卡死)
+        if (!counts.miner) {
+            if (trySpawn(spawn, 'miner', emergencyBody(room, 'miner'))) continue;
         }
-        if (counts.hauler === 0) {
-            if (trySpawn(spawn, 'hauler', [CARRY, CARRY, MOVE])) continue;
+        if (!counts.hauler) {
+            if (trySpawn(spawn, 'hauler', emergencyBody(room, 'hauler'))) continue;
         }
 
     // 動態目標
@@ -87,10 +119,12 @@ function run() {
             if (!owned) target.settler = 1;
         }
         for (const role of order) {
-            if ((counts[role] || 0) < (target[role] || 0)) {
-                const body = buildDynamicBody(role, room.energyCapacityAvailable);
-                if (trySpawn(spawn, role, body)) break;
-            }
+            if ((counts[role] || 0) >= (target[role] || 0)) continue;
+            // 限制 settler / reserver 的最小能量門檻 (CLAIM 必須 >=600 + MOVE)
+            if ((role === 'settler' || role === 'reserver') && room.energyAvailable < 650) continue;
+            const body = buildDynamicBody(role, room.energyAvailable);
+            if (!body || !body.length) continue;
+            if (trySpawn(spawn, role, body)) break;
         }
 
         if (Game.time % config.LOG_TICK_INTERVAL === 0) {
@@ -115,34 +149,130 @@ function partCost(part) {
 }
 
 function buildDynamicBody(role, energyCap) {
-    // 基本 pattern
-    let pattern;
-    let maxRepeat = 25;
-    switch (role) {
-        case 'miner': pattern = [WORK, WORK, MOVE]; maxRepeat = 3; break; // 最多 6 WORK
-        case 'hauler': pattern = [CARRY, CARRY, MOVE]; maxRepeat = 8; break;
-        case 'upgrader': pattern = [WORK, CARRY, MOVE]; maxRepeat = 10; break;
-        case 'builder': pattern = [WORK, CARRY, MOVE]; maxRepeat = 8; break;
-        case 'repairer': pattern = [WORK, CARRY, MOVE]; maxRepeat = 6; break;
-    case 'ranger': pattern = [RANGED_ATTACK, MOVE, MOVE]; maxRepeat = 5; break;
-    case 'reserver': pattern = [CLAIM, MOVE]; maxRepeat = 2; break;
-    case 'remoteMiner': pattern = [WORK, WORK, MOVE]; maxRepeat = 5; break;
-    case 'remoteHauler': pattern = [CARRY, CARRY, MOVE]; maxRepeat = 10; break;
-    case 'pioneer': pattern = [WORK, CARRY, MOVE]; maxRepeat = 8; break;
-    case 'settler': pattern = [CLAIM, WORK, CARRY, MOVE, MOVE]; maxRepeat = 1; break;
-    case 'mineralMiner': pattern = [WORK, WORK, MOVE]; maxRepeat = 5; break;
-        default: pattern = [WORK, CARRY, MOVE];
+    const cost = p => partCost(p);
+    // 高價角色直接檢查 (CLAIM) — 無足夠能量返回 null 讓外層跳過
+    if ((role === 'reserver' || role === 'settler') && energyCap < 650) return null;
+
+    function repeatPattern(pattern, maxRepeat) {
+        let body = [];
+        for (let i=0;i<maxRepeat;i++) {
+            const next = body.concat(pattern);
+            const price = next.reduce((s,p)=>s+cost(p),0);
+            if (price > energyCap || next.length>50) break;
+            body = next;
+        }
+        return body;
     }
+
+    switch (role) {
+        case 'miner': {
+            let body = repeatPattern([WORK, WORK, MOVE], 3);
+            if (!body.length) {
+                if (energyCap >= 150) return [WORK, MOVE];
+                if (energyCap >= 100) return [WORK];
+                return null; // 無法建置
+            }
+            return body;
+        }
+        case 'remoteMiner':
+        case 'mineralMiner': {
+            let body = repeatPattern([WORK, WORK, MOVE], 5);
+            if (!body.length) {
+                if (energyCap >= 150) return [WORK, MOVE];
+                if (energyCap >= 100) return [WORK];
+                return null;
+            }
+            return body;
+        }
+        case 'hauler':
+        case 'remoteHauler': {
+            let body = repeatPattern([CARRY, CARRY, MOVE], 10);
+            if (!body.length) {
+                if (energyCap >= 100) return [CARRY, MOVE];
+                if (energyCap >= 50) return [MOVE];
+                return null;
+            }
+            return body;
+        }
+        case 'upgrader':
+        case 'builder':
+        case 'repairer':
+        case 'pioneer': {
+            let body = repeatPattern([WORK, CARRY, MOVE], 10);
+            if (!body.length) {
+                if (energyCap >= 200) return [WORK, CARRY, MOVE];
+                if (energyCap >= 150) return [WORK, MOVE];
+                if (energyCap >= 100) return [WORK];
+                return null;
+            }
+            return body;
+        }
+        case 'ranger': {
+            // 首選 RA 輕量 kite，否則退而 ATTACK
+            if (energyCap >= 250) {
+                let body = repeatPattern([RANGED_ATTACK, MOVE, MOVE], 5);
+                return body.length ? body : [RANGED_ATTACK, MOVE];
+            }
+            if (energyCap >= 130) return [ATTACK, MOVE];
+            if (energyCap >= 50) return [MOVE];
+            return null;
+        }
+        case 'reserver':
+            return [CLAIM, MOVE]; // energyCap >=650 已前置檢查
+        case 'settler':
+            // 基本拓殖組合：CLAIM + WORK + CARRY + MOVE + MOVE (若不足降級)
+            if (energyCap >= 850) return [CLAIM, WORK, CARRY, MOVE, MOVE];
+            if (energyCap >= 700) return [CLAIM, WORK, MOVE, MOVE];
+            return [CLAIM, MOVE];
+        default:
+            if (energyCap >= 200) return [WORK, CARRY, MOVE];
+            if (energyCap >= 150) return [WORK, MOVE];
+            if (energyCap >= 100) return [WORK];
+            return null;
+    }
+}
+
+function buildPioneerBody(energyCap){
+    // 以 [WORK,CARRY,MOVE] pattern 疊加
+    const pattern = [WORK, CARRY, MOVE];
     const cost = p => partCost(p);
     let body = [];
-    for (let i = 0; i < maxRepeat; i++) {
+    for (let i=0;i<10;i++) { // 最多 10 次 => 30 parts
         const next = body.concat(pattern);
-        const price = next.reduce((s, p) => s + cost(p), 0);
-        if (price > energyCap || next.length > 50) break;
+        const price = next.reduce((s,p)=>s+cost(p),0);
+        if (price > energyCap || next.length>50) break;
         body = next;
     }
-    if (body.length === 0) body = pattern; // fallback
+    if (body.length === 0) {
+        if (energyCap >= 200) return [WORK, CARRY, MOVE];
+        if (energyCap >= 150) return [WORK, MOVE];
+        return [WORK];
+    }
     return body;
+}
+
+// 緊急身體：盡可能用現有 energy 組裝最小 pattern
+function emergencyBody(room, role){
+    const avail = room.energyAvailable;
+    if (role === 'miner') {
+        if (avail >= 250) return [WORK, WORK, MOVE];
+        if (avail >= 200) return [WORK, MOVE, MOVE];
+        if (avail >= 150) return [WORK, MOVE];
+        return [WORK];
+    }
+    if (role === 'hauler') {
+        if (avail >= 150) return [CARRY, CARRY, MOVE];
+        if (avail >= 100) return [CARRY, MOVE];
+        return [MOVE];
+    }
+    return [WORK, CARRY, MOVE];
+}
+
+function shrinkBody(body){
+    if (body.length <= 3) return body; // 已是最小
+    // 嘗試按 3 個一組 (pattern) 移除，否則移除最後一個
+    const size = Math.max(3, Math.floor(body.length/2));
+    return body.slice(0, size);
 }
 
 function trySpawn(spawn, role, body) {
@@ -151,6 +281,11 @@ function trySpawn(spawn, role, body) {
     if (res === OK) {
         log.info(`[Spawn] ${spawn.name} -> ${name} (${body.length} parts)`);
         return true;
+    }
+    if (res === ERR_NOT_ENOUGH_ENERGY && Game.time % 10 === 0) {
+        if (config.DEBUG) log.debug(`[SpawnFail] energy不足 role=${role} cost=${body.reduce((s,p)=>s+partCost(p),0)} avail=${spawn.room.energyAvailable}`);
+    } else if (res !== ERR_BUSY && res !== ERR_NOT_ENOUGH_ENERGY && Game.time % 10 === 0) {
+        log.warn(`[SpawnFail] role=${role} code=${res}`);
     }
     return false;
 }

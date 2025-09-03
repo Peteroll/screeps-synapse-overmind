@@ -69,8 +69,12 @@ function expand(p, graph, acc, visited) {
 }
 
 function computeSurplus() {
+    if (!Memory.resource) Memory.resource = { reserved:{}, demand:{}, surplus:{} };
+    if (!Memory.resource.surplus) Memory.resource.surplus = {};
+    if (!Memory.resource.reserved) Memory.resource.reserved = {};
+    if (!Memory.resource.demand) Memory.resource.demand = {};
     const surplus = Memory.resource.surplus;
-    const demand = Memory.resource.demand || {};
+    const demand = Memory.resource.demand;
     for (const roomName in Game.rooms) {
         const room = Game.rooms[roomName];
         if (!room.storage) continue;

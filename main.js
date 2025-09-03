@@ -2,7 +2,7 @@
 // 新增 managers / roles 模組化。若初次部署仍只有 main.js，請將下列 require 對應檔案加入。
 // 版本常數 (同步 README)
 global.STRATEGY_NAME = 'Synapse Overmind';
-global.STRATEGY_VERSION = '0.9.7'; // comehere 手動拓殖 + Settler
+global.STRATEGY_VERSION = '0.9.8'; // 佈局維護：錯置結構延遲拆除 + 低流量道路精簡
 
 const config = require('util.config');
 const log = require('util.log');

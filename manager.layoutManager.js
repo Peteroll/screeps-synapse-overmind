@@ -3,6 +3,7 @@
 
 function run() {
     if (!Memory.layout) Memory.layout = {};
+    if (!Memory.layoutEval) Memory.layoutEval = {};
     for (const roomName in Game.rooms) {
         const room = Game.rooms[roomName];
         if (!room.controller || !room.controller.my) continue;
@@ -11,8 +12,8 @@ function run() {
         if (!lay || lay.rclPlanned !== rcl) {
             Memory.layout[roomName] = planRoom(room, rcl);
         }
-        // 可擴充：放置 construction sites (節流)
         placeSites(room, Memory.layout[roomName]);
+        evaluateExisting(room, Memory.layout[roomName]);
     }
 }
 
@@ -185,6 +186,100 @@ function placeSites(room, layout) {
             if (cont && cont.store.getUsedCapacity() < 200) cont.destroy();
         }
     }
+}
+
+// 評估既有結構是否保留：
+// 1. extension / link / lab 等若不在 layout 計畫座標且屬於本房，標記拆除 (延遲執行)
+// 2. 道路：使用 traffic delta 判斷長期低使用且不在 layout.roads -> 拆除
+function evaluateExisting(room, layout) {
+    const cfg = require('util.config').LAYOUT;
+    if (Game.time % cfg.EVALUATE_INTERVAL !== 0) return;
+    if (!layout) return;
+    const rec = Memory.layoutEval[room.name] || (Memory.layoutEval[room.name] = { dismantleQueue: {} });
+    const plannedSets = buildPlannedSets(layout);
+    const all = room.find(FIND_STRUCTURES);
+    for (const s of all) {
+        if (!shouldConsider(s)) continue;
+        const key = s.pos.x+','+s.pos.y+'_'+s.structureType;
+        if (isPlanned(plannedSets, s)) {
+            // 若之前排拆現在又成為計畫 -> 取消
+            if (rec.dismantleQueue[key]) delete rec.dismantleQueue[key];
+            continue;
+        }
+        // 道路特殊：看 traffic delta
+        if (s.structureType === STRUCTURE_ROAD) {
+            if (room.controller.level < cfg.UNUSED_ROAD_MIN_RCL) continue;
+            const tRec = Memory.traffic && Memory.traffic[room.name] && Memory.traffic[room.name][s.pos.x+'_'+s.pos.y];
+            if (!tRec) continue; // 無資料暫不處理
+            const delta = tRec.c - (tRec.lc || tRec.c); // 若沒有歷史 就視為 0 delta
+            if (plannedSets.roads.has(s.pos.x+','+s.pos.y)) continue; // 計畫內道路保留
+            if (delta >= cfg.UNUSED_ROAD_DELTA_THRESHOLD) continue; // 有使用
+            enqueue(rec.dismantleQueue, key, s.id);
+            continue;
+        }
+        // 其他結構 (extension/link/lab/container...) 若不在計畫座標 -> 排拆
+        enqueue(rec.dismantleQueue, key, s.id);
+    }
+    // 執行延遲拆除 (限制數量)
+    let removed = 0;
+    for (const k in rec.dismantleQueue) {
+        if (removed >= cfg.MAX_DISMANTLE_PER_RUN) break;
+        const d = rec.dismantleQueue[k];
+        if (!d || !d.id) { delete rec.dismantleQueue[k]; continue; }
+        const obj = Game.getObjectById(d.id);
+        if (!obj) { delete rec.dismantleQueue[k]; continue; }
+        if (Game.time - d.ts < cfg.MISPLACED_DISMANTLE_DELAY) continue; // 尚未達等待時間
+        // 避免誤拆：spawn / storage / terminal / controller 還是保留
+        if (obj.structureType === STRUCTURE_SPAWN || obj.structureType === STRUCTURE_STORAGE || obj.structureType === STRUCTURE_TERMINAL || obj.structureType === STRUCTURE_CONTROLLER) { delete rec.dismantleQueue[k]; continue; }
+        obj.destroy();
+        removed++;
+        delete rec.dismantleQueue[k];
+    }
+}
+
+function buildPlannedSets(layout) {
+    const setOf = arr => {
+        const s = new Set();
+        if (!arr) return s; for (let i=0;i<arr.length;i++) s.add(arr[i][0]+','+arr[i][1]);
+        return s;
+    };
+    return {
+        roads: setOf(layout.roads),
+        extensions: setOf(layout.extensions),
+        links: setOf(layout.links),
+        labs: layout.hub && layout.hub.labs ? setOf(layout.hub.labs) : new Set(),
+        storage: layout.hub && layout.hub.storage ? new Set([layout.hub.storage[0]+','+layout.hub.storage[1]]) : new Set(),
+        terminal: layout.hub && layout.hub.terminal ? new Set([layout.hub.terminal[0]+','+layout.hub.terminal[1]]) : new Set(),
+        factory: layout.hub && layout.hub.factory ? new Set([layout.hub.factory[0]+','+layout.hub.factory[1]]) : new Set()
+    };
+}
+
+function isPlanned(sets, s) {
+    const k = s.pos.x+','+s.pos.y;
+    switch (s.structureType) {
+        case STRUCTURE_ROAD: return sets.roads.has(k);
+        case STRUCTURE_EXTENSION: return sets.extensions.has(k);
+        case STRUCTURE_LINK: return sets.links.has(k);
+        case STRUCTURE_LAB: return sets.labs.has(k);
+        case STRUCTURE_STORAGE: return sets.storage.has(k);
+        case STRUCTURE_TERMINAL: return sets.terminal.has(k);
+        case STRUCTURE_FACTORY: return sets.factory.has(k);
+        default: return true; // 其他暫不強制規劃 (如 tower / rampart / container)
+    }
+}
+
+function shouldConsider(s) {
+    // 僅處理我方所有權 (except road 也屬於我方) & 排除 controller / wall / rampart (不要自動拆)
+    if (s.structureType === STRUCTURE_CONTROLLER) return false;
+    if (s.structureType === STRUCTURE_RAMPART) return false;
+    if (s.structureType === STRUCTURE_WALL) return false;
+    if (s.structureType === STRUCTURE_TOWER) return false; // 暫不自動調整 tower 位置
+    if (s.structureType === STRUCTURE_CONTAINER && s.pos.findInRange(FIND_SOURCES,1).length>0) return false; // source container 暫保留
+    return true;
+}
+
+function enqueue(queue, key, id) {
+    if (!queue[key]) queue[key] = { id:id, ts: Game.time };
 }
 
 module.exports = { run };

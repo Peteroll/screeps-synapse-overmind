@@ -74,4 +74,12 @@ module.exports = {
     BOOST_PART_COST: 30, // 每部件消耗 30 單位 (標準規則)
     SAFETY_STOCK_RATIO: 0.3 // 中間產物/目標需求的安全庫存比例
     }
+    ,
+    LAYOUT: {
+        EVALUATE_INTERVAL: 150, // 每隔幾 tick 執行一次保留/拆除評估
+        MISPLACED_DISMANTLE_DELAY: 500, // 結構進入拆除佇列後等待多少 tick 才真正 destroy
+        UNUSED_ROAD_DELTA_THRESHOLD: 5, // 期間內使用次數 (traffic delta) 低於此且不在計畫清單 -> 排入拆除
+        UNUSED_ROAD_MIN_RCL: 5, // 只有達到此 RCL 才做道路精簡 (避免早期過度移除)
+        MAX_DISMANTLE_PER_RUN: 2 // 單次評估最多實際拆除數 (節流)
+    }
 };

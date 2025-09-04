@@ -14,6 +14,20 @@ function run() {
         const counts = countRoles();
         const totalCreeps = Object.keys(Game.creeps).length;
 
+        // 檢查是否已存在任何含 WORK 的 creep
+        const hasWorkCreep = Object.values(Game.creeps).some(c => c.body.some(p=>p.type===WORK));
+
+        // 若完全沒有任何 WORK creep，先累積能量直到能產出 [WORK,MOVE] (150) 避免生出無法移動的 WORK 或無 WORK 單位耗能卡死
+        if (!hasWorkCreep) {
+            if (room.energyAvailable >= 150) {
+                const body = [WORK, MOVE];
+                if (trySpawn(spawn, 'miner', body)) continue; // 成功後下個 tick 重新評估
+            } else {
+                if (Game.time % 25 === 0 && config.DEBUG) log.debug(`[Bootstrap] 等待能量>=150 生出首個 WORK creep (現有 ${room.energyAvailable})`);
+            }
+            continue; // 先確保第一個 WORK 單位
+        }
+
         // === 災後復原 / Bootstrap 模式 ===
         // 觸發條件：完全沒有 creep，或記憶仍標記 active
         if (totalCreeps === 0) {
@@ -47,10 +61,15 @@ function run() {
         // 緊急：無 miner or 無 hauler → 先造緊急工人
         // (原本使用 counts.miner === 0 若 undefined 不會觸發，導致全滅後卡死)
         if (!counts.miner) {
-            if (trySpawn(spawn, 'miner', emergencyBody(room, 'miner'))) continue;
+            const eb = emergencyBody(room, 'miner');
+            if (eb && trySpawn(spawn, 'miner', eb)) continue;
         }
         if (!counts.hauler) {
-            if (trySpawn(spawn, 'hauler', emergencyBody(room, 'hauler'))) continue;
+            // 沒 miner 先不要造 hauler 以免浪費能量
+            if (counts.miner) {
+                const hb = emergencyBody(room, 'hauler');
+                if (hb && trySpawn(spawn, 'hauler', hb)) continue;
+            }
         }
 
     // 動態目標
@@ -255,10 +274,9 @@ function buildPioneerBody(energyCap){
 function emergencyBody(room, role){
     const avail = room.energyAvailable;
     if (role === 'miner') {
-        if (avail >= 250) return [WORK, WORK, MOVE];
-        if (avail >= 200) return [WORK, MOVE, MOVE];
-        if (avail >= 150) return [WORK, MOVE];
-        return [WORK];
+    if (avail >= 250) return [WORK, WORK, MOVE];
+    if (avail >= 150) return [WORK, MOVE];
+    return null; // 不產生只有 WORK 無法移動的單位，等待能量
     }
     if (role === 'hauler') {
         if (avail >= 150) return [CARRY, CARRY, MOVE];

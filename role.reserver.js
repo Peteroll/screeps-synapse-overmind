@@ -10,6 +10,10 @@ module.exports = {
         }
         if (!creep.room.controller) return;
         if (creep.reserveController(creep.room.controller) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.controller);
+        else {
+            const jm = require('manager.jobManager');
+            jm.fallbackTask(creep);
+        }
     }
 };
 

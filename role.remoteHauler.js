@@ -14,6 +14,10 @@ module.exports = {
             if (cont) { if (creep.withdraw(cont, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(cont); return; }
             const src = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
             if (src && creep.harvest(src) === ERR_NOT_IN_RANGE) creep.moveTo(src);
+            else {
+                const jm = require('manager.jobManager');
+                jm.fallbackTask(creep);
+            }
         } else {
             // 回母房
             const firstSpawnName = Object.keys(Game.spawns)[0];
@@ -21,6 +25,10 @@ module.exports = {
             if (home && creep.room.name !== home.name) { moveToRoom(creep, home.name); return; }
             const target = creep.pos.findClosestByPath(FIND_STRUCTURES, { filter: s => [STRUCTURE_SPAWN, STRUCTURE_EXTENSION, STRUCTURE_STORAGE, STRUCTURE_TOWER].includes(s.structureType) && s.store.getFreeCapacity(RESOURCE_ENERGY) > 0 });
             if (target) { if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(target); }
+            else {
+                const jm = require('manager.jobManager');
+                jm.fallbackTask(creep);
+            }
         }
     }
 };

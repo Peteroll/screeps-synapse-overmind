@@ -12,7 +12,9 @@ function run() {
 }
 
 function isSerializedPath(str) {
-    return typeof str === 'string' && str.length > 0 && /^[1-8]+$/.test(str);
+    // Room.serializePath returns a string (may contain non-printable chars).
+    // Only need to check it's a non-empty string here.
+    return typeof str === 'string' && str.length > 0;
 }
 
 function getPath(fromPos, toPos) {

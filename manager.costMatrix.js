@@ -83,10 +83,12 @@ function recordTraffic() {
         const rn = c.room.name;
         if (!Memory.traffic[rn]) Memory.traffic[rn] = {};
         const key = c.pos.x + '_' + c.pos.y;
-        const spot = Memory.traffic[rn][key] || { c:0, last:Game.time };
-        spot.c = Math.min(10000, spot.c + 1);
-        spot.last = Game.time;
-        Memory.traffic[rn][key] = spot;
+    const spot = Memory.traffic[rn][key] || { c:0, last:Game.time, lc:0 };
+    // snapshot last count for layout evaluation delta computations
+    spot.lc = spot.c || 0;
+    spot.c = Math.min(10000, spot.c + 1);
+    spot.last = Game.time;
+    Memory.traffic[rn][key] = spot;
     }
     // 週期性衰減 (每 100 tick)
     if (Game.time % 100 === 0) {

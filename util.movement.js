@@ -47,8 +47,28 @@ if (!Creep.prototype._moveOriginal) {
             }
             if (this.memory._cachedPath.length) {
                 const next = this.memory._cachedPath[0];
-                this.move(this.pos.getDirectionTo(next[0], next[1]));
-                return OK;
+                try {
+                    // normalize next into a RoomPosition to be robust across API shapes
+                    let toPos = null;
+                    if (Array.isArray(next) && typeof next[0] === 'number' && typeof next[1] === 'number') {
+                        toPos = new RoomPosition(next[0], next[1], this.pos.roomName);
+                    } else if (next && next.x !== undefined && next.y !== undefined) {
+                        toPos = new RoomPosition(next.x, next.y, this.pos.roomName);
+                    }
+                    if (toPos) {
+                        const dir = this.pos.getDirectionTo(toPos);
+                        this.move(dir);
+                        return OK;
+                    } else {
+                        // invalid cached step -> drop cache
+                        delete this.memory._cachedPath;
+                    }
+                } catch (e) {
+                    // 若任何錯誤，回退到原生 moveTo
+                    delete this.memory._cachedPathKey;
+                    delete this.memory._cachedPath;
+                    return this._moveOriginal(target, opts);
+                }
             }
         }
         return this._moveOriginal(target, opts);

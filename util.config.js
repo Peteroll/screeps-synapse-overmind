@@ -87,4 +87,10 @@ module.exports = {
         DANGER_TICKS: 4000, // 若 controller.ticksToDowngrade 小於此視為危險
         MIN_UPGRADERS: 2 // 危險期希望至少有多少 upgrader
     }
+    ,
+    SPAWN_COOLDOWN: {
+        ENERGY_TICKS: 20,
+        BUSY_TICKS: 5,
+        UNKNOWN_TICKS: 50
+    }
 };

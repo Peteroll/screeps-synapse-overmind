@@ -59,5 +59,8 @@ module.exports = {
             m.tickHarvest += creep.getActiveBodyparts(WORK); // 粗略記帳：每 WORK 視為 1 單位 (實際與冷卻/提煉一致即可總覽)
             m.lastTick = Game.time;
         }
+    // fallback when idle
+    const jm = require('manager.jobManager');
+    jm.fallbackTask(creep);
     }
 };

@@ -187,6 +187,10 @@ module.exports = {
                 for (const r in creep.store) {
                     if (creep.transfer(creep.room.storage, r) === ERR_NOT_IN_RANGE) { creep.moveTo(creep.room.storage); break; }
                 }
+            } else {
+                // fallback to jobManager helper
+                const jm = require('manager.jobManager');
+                if (jm.fallbackTask(creep)) return;
             }
         }
     }

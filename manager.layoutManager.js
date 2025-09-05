@@ -211,7 +211,7 @@ function evaluateExisting(room, layout) {
             if (room.controller.level < cfg.UNUSED_ROAD_MIN_RCL) continue;
             const tRec = Memory.traffic && Memory.traffic[room.name] && Memory.traffic[room.name][s.pos.x+'_'+s.pos.y];
             if (!tRec) continue; // 無資料暫不處理
-            const delta = tRec.c - (tRec.lc || tRec.c); // 若沒有歷史 就視為 0 delta
+            const delta = (tRec.c || 0) - (tRec.lc || 0); // 使用前後紀錄計算 delta
             if (plannedSets.roads.has(s.pos.x+','+s.pos.y)) continue; // 計畫內道路保留
             if (delta >= cfg.UNUSED_ROAD_DELTA_THRESHOLD) continue; // 有使用
             enqueue(rec.dismantleQueue, key, s.id);

@@ -6,19 +6,19 @@ module.exports = {
         if (creep.memory.working && creep.store[RESOURCE_ENERGY] === 0) creep.memory.working = false;
         if (!creep.memory.working && creep.store.getFreeCapacity() === 0) creep.memory.working = true;
 
-        // 若有 jobId 但 job 已不存在 → 清除
+        // 清理失效 jobId
         if (creep.memory.jobId && !jobManager.getJob(creep.memory.jobId)) delete creep.memory.jobId;
 
-    // 若 controller 即將降階 (danger) 或房間缺少 upgrader，builder 在沒有工作時會做為臨時 upgrader
-    const cfg = require('util.config');
-    const room = creep.room;
-    const ttd = room.controller && room.controller.ticksToDowngrade !== undefined ? room.controller.ticksToDowngrade : Infinity;
-    const upgraderCount = room.find(FIND_MY_CREEPS, { filter: c => c.memory.role === 'upgrader' }).length;
-    const minUp = (cfg.DOWNGRADE && cfg.DOWNGRADE.MIN_UPGRADERS) || 2;
-    const danger = ttd < (cfg.DOWNGRADE && cfg.DOWNGRADE.DANGER_TICKS || 4000) || upgraderCount < minUp;
+        // 若 controller 即將降階 (danger) 或房間缺少 upgrader，builder 在沒有工作時會做為臨時 upgrader
+        const cfg = require('util.config');
+        const room = creep.room;
+        const ttd = room.controller && room.controller.ticksToDowngrade !== undefined ? room.controller.ticksToDowngrade : Infinity;
+        const upgraderCount = room.find(FIND_MY_CREEPS, { filter: c => c.memory.role === 'upgrader' }).length;
+        const minUp = (cfg.DOWNGRADE && cfg.DOWNGRADE.MIN_UPGRADERS) || 2;
+        const danger = ttd < (cfg.DOWNGRADE && cfg.DOWNGRADE.DANGER_TICKS || 4000) || upgraderCount < minUp;
 
-    if (creep.memory.working) {
-            // 沒有工作就 claim build 或 repair 類
+        if (creep.memory.working) {
+            // 優先領取 build/repair 類 job
             if (!creep.memory.jobId) {
                 jobManager.claimJob(creep, j => j.type === 'build' || j.type === 'repair');
             }
@@ -31,25 +31,17 @@ module.exports = {
                 } else if (job.type === 'build' && target instanceof ConstructionSite) {
                     const r = creep.build(target);
                     if (r === ERR_NOT_IN_RANGE) creep.moveTo(target);
-                    // 完成條件：site 不再存在 (下次迴圈會清除) 或進度接近完成
-                    if (target.progress >= target.progressTotal) {
-                        jobManager.completeJob(job.id);
-                        delete creep.memory.jobId;
-                    }
+                    if (target.progress >= target.progressTotal) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
                 } else if (job.type === 'repair' && target.hits !== undefined) {
                     const r = creep.repair(target);
                     if (r === ERR_NOT_IN_RANGE) creep.moveTo(target);
-                    if (target.hits >= target.hitsMax * 0.9) { // 達成
-                        jobManager.completeJob(job.id);
-                        delete creep.memory.jobId;
-                    }
+                    if (target.hits >= target.hitsMax * 0.9) { jobManager.completeJob(job.id); delete creep.memory.jobId; }
                 } else {
-                    // 型別不符 → 釋放
                     jobManager.completeJob(job.id);
                     delete creep.memory.jobId;
                 }
             } else {
-                // 沒 job → 升級（或作為緊急 upgrader）
+                // 無建造/修理工作 -> 當作 upgrader（或臨時 upgrader）去 controller 升級
                 if (creep.room.controller && creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.controller);
             }
         } else {
@@ -60,13 +52,11 @@ module.exports = {
             if (drop) { if (creep.pickup(drop) === ERR_NOT_IN_RANGE) creep.moveTo(drop); return; }
             const src = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
             if (src && creep.harvest(src) === ERR_NOT_IN_RANGE) creep.moveTo(src);
-            // 若在危險期或沒有建造工作，且能量略為不足，直接轉為跑去 controller 升級以保護控制器
-            if (danger) {
-                // 若攜帶能量就去升級
-                if (creep.store[RESOURCE_ENERGY] > 0) {
-                    if (creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.controller);
-                    return;
-                }
+
+            // 若在危險期且攜帶少量能量，立即前往 controller 升級
+            if (danger && creep.store[RESOURCE_ENERGY] > 0) {
+                if (creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.controller);
+                return;
             }
         }
     }

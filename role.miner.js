@@ -2,6 +2,11 @@ const log = require('util.log');
 
 module.exports = {
     run(creep) {
+        // 若沒有任何 WORK 部件，標記為 upgrader（避免無法採集的死板礦工）
+        if (creep.getActiveBodyparts(WORK) === 0) {
+            creep.memory.role = 'upgrader';
+            return;
+        }
         if (!creep.memory.sourceId) assignSource(creep);
         const source = Game.getObjectById(creep.memory.sourceId);
         if (!source) { creep.say('nosrc'); return; }

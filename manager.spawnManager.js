@@ -28,7 +28,21 @@ function run() {
             continue; // 先確保第一個 WORK 單位
         }
 
-        // === 災後復原 / Bootstrap 模式 ===
+    // prune expired spawn cooldowns (cleanup once per run)
+    if (Memory.spawnCooldown) {
+        for (const sn in Memory.spawnCooldown) {
+            const map = Memory.spawnCooldown[sn];
+            for (const r in map) {
+                if (map[r] <= Game.time) delete map[r];
+            }
+            if (Object.keys(map).length === 0) delete Memory.spawnCooldown[sn];
+        }
+    }
+    // ensure Memory.spawnCooldown exists for this spawn
+    if (!Memory.spawnCooldown) Memory.spawnCooldown = {};
+    if (!Memory.spawnCooldown[spawn.name]) Memory.spawnCooldown[spawn.name] = {};
+
+    // === 災後復原 / Bootstrap 模式 ===
         // 觸發條件：完全沒有 creep，或記憶仍標記 active
         if (totalCreeps === 0) {
             if (!Memory.bootstrap) Memory.bootstrap = {}; 
@@ -164,6 +178,9 @@ function run() {
             if ((counts[role] || 0) >= (target[role] || 0)) continue;
             // 限制 settler / reserver 的最小能量門檻 (CLAIM 必須 >=600 + MOVE)
             if ((role === 'settler' || role === 'reserver') && room.energyAvailable < 650) continue;
+            // per-role cooldown: skip if this spawn recently attempted this role
+            const cd = Memory.spawnCooldown[spawn.name] && Memory.spawnCooldown[spawn.name][role];
+            if (cd && cd > Game.time) continue;
             const body = buildDynamicBody(role, room.energyAvailable);
             if (!body || !body.length) continue;
             if (trySpawn(spawn, role, body)) break;
@@ -211,8 +228,7 @@ function buildDynamicBody(role, energyCap) {
             let body = repeatPattern([WORK, WORK, MOVE], 3);
             if (!body.length) {
                 if (energyCap >= 150) return [WORK, MOVE];
-                if (energyCap >= 100) return [WORK];
-                return null; // 無法建置
+                return null; // 無法建置或會是只有 WORK 的身體 -> 不生
             }
             return body;
         }
@@ -221,7 +237,6 @@ function buildDynamicBody(role, energyCap) {
             let body = repeatPattern([WORK, WORK, MOVE], 5);
             if (!body.length) {
                 if (energyCap >= 150) return [WORK, MOVE];
-                if (energyCap >= 100) return [WORK];
                 return null;
             }
             return body;
@@ -231,7 +246,7 @@ function buildDynamicBody(role, energyCap) {
             let body = repeatPattern([CARRY, CARRY, MOVE], 10);
             if (!body.length) {
                 if (energyCap >= 100) return [CARRY, MOVE];
-                if (energyCap >= 50) return [MOVE];
+                // energy insufficient to build useful hauler (CARRY+MOVE); avoid MOVE-only creeps
                 return null;
             }
             return body;
@@ -244,7 +259,6 @@ function buildDynamicBody(role, energyCap) {
             if (!body.length) {
                 if (energyCap >= 200) return [WORK, CARRY, MOVE];
                 if (energyCap >= 150) return [WORK, MOVE];
-                if (energyCap >= 100) return [WORK];
                 return null;
             }
             return body;
@@ -256,7 +270,8 @@ function buildDynamicBody(role, energyCap) {
                 return body.length ? body : [RANGED_ATTACK, MOVE];
             }
             if (energyCap >= 130) return [ATTACK, MOVE];
-            if (energyCap >= 50) return [MOVE];
+            // avoid producing MOVE-only ranger
+            return null;
             return null;
         }
         case 'reserver':
@@ -269,7 +284,6 @@ function buildDynamicBody(role, energyCap) {
         default:
             if (energyCap >= 200) return [WORK, CARRY, MOVE];
             if (energyCap >= 150) return [WORK, MOVE];
-            if (energyCap >= 100) return [WORK];
             return null;
     }
 }
@@ -288,7 +302,8 @@ function buildPioneerBody(energyCap){
     if (body.length === 0) {
         if (energyCap >= 200) return [WORK, CARRY, MOVE];
         if (energyCap >= 150) return [WORK, MOVE];
-        return [WORK];
+    // avoid producing WORK-only creep which cannot move; return null to wait
+    return null;
     }
     return body;
 }
@@ -297,14 +312,15 @@ function buildPioneerBody(energyCap){
 function emergencyBody(room, role){
     const avail = room.energyAvailable;
     if (role === 'miner') {
-    if (avail >= 250) return [WORK, WORK, MOVE];
-    if (avail >= 150) return [WORK, MOVE];
-    return null; // 不產生只有 WORK 無法移動的單位，等待能量
+        if (avail >= 250) return [WORK, WORK, MOVE];
+        if (avail >= 150) return [WORK, MOVE];
+        return null; // 不產生只有 WORK 無法移動的單位，等待能量
     }
     if (role === 'hauler') {
         if (avail >= 150) return [CARRY, CARRY, MOVE];
         if (avail >= 100) return [CARRY, MOVE];
-        return [MOVE];
+        // avoid producing MOVE-only hauler; wait for more energy
+        return null;
     }
     return [WORK, CARRY, MOVE];
 }
@@ -321,12 +337,26 @@ function trySpawn(spawn, role, body) {
     const res = spawn.spawnCreep(body, name, { memory: { role, working: false } });
     if (res === OK) {
         log.info(`[Spawn] ${spawn.name} -> ${name} (${body.length} parts)`);
+        // clear cooldown for this role on success
+        if (Memory.spawnCooldown && Memory.spawnCooldown[spawn.name]) delete Memory.spawnCooldown[spawn.name][role];
         return true;
     }
-    if (res === ERR_NOT_ENOUGH_ENERGY && Game.time % 10 === 0) {
-        if (config.DEBUG) log.debug(`[SpawnFail] energy不足 role=${role} cost=${body.reduce((s,p)=>s+partCost(p),0)} avail=${spawn.room.energyAvailable}`);
-    } else if (res !== ERR_BUSY && res !== ERR_NOT_ENOUGH_ENERGY && Game.time % 10 === 0) {
-        log.warn(`[SpawnFail] role=${role} code=${res}`);
+    // set per-role cooldowns on failure to avoid spam
+    if (!Memory.spawnCooldown) Memory.spawnCooldown = {};
+    if (!Memory.spawnCooldown[spawn.name]) Memory.spawnCooldown[spawn.name] = {};
+    const cost = body.reduce((s,p)=>s+partCost(p),0);
+    const scfg = config.SPAWN_COOLDOWN || { ENERGY_TICKS:20, BUSY_TICKS:5, UNKNOWN_TICKS:50 };
+    if (res === ERR_NOT_ENOUGH_ENERGY) {
+        // small cooldown to wait for energy accumulation
+        Memory.spawnCooldown[spawn.name][role] = Game.time + (scfg.ENERGY_TICKS || 20);
+        if (Game.time % 10 === 0 && config.DEBUG) log.debug(`[SpawnFail] energy不足 role=${role} cost=${cost} avail=${spawn.room.energyAvailable}`);
+    } else if (res === ERR_BUSY) {
+        // spawn busy, short cooldown
+        Memory.spawnCooldown[spawn.name][role] = Game.time + (scfg.BUSY_TICKS || 5);
+    } else {
+        // unknown error - slightly longer cooldown and log
+        Memory.spawnCooldown[spawn.name][role] = Game.time + (scfg.UNKNOWN_TICKS || 50);
+        if (Game.time % 10 === 0) log.warn(`[SpawnFail] ${spawn.name} role=${role} code=${res}`);
     }
     return false;
 }

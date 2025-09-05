@@ -38,6 +38,10 @@ module.exports = {
             } else if (controller && controller.my) {
                 if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE) creep.moveTo(controller);
             }
+            else {
+                const jm = require('manager.jobManager');
+                jm.fallbackTask(creep);
+            }
         }
     }
 };

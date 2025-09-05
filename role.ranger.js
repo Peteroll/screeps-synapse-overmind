@@ -23,7 +23,11 @@ module.exports = {
         } else {
             // 待命在控制器附近或 spawn 附近
             const anchor = creep.room.controller || Game.spawns[Object.keys(Game.spawns)[0]];
-            if (anchor && creep.pos.getRangeTo(anchor) > 5) creep.moveTo(anchor, { visualizePathStyle: { stroke: '#99ccff' } });
+                if (anchor && creep.pos.getRangeTo(anchor) > 5) creep.moveTo(anchor, { visualizePathStyle: { stroke: '#99ccff' } });
+                else {
+                    const jm = require('manager.jobManager');
+                    jm.fallbackTask(creep);
+                }
         }
     }
 };

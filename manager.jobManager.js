@@ -114,4 +114,37 @@ function completeJob(jobId) {
     if (idx >= 0) Memory.jobs.queue.splice(idx, 1);
 }
 
-module.exports = { buildGlobalQueue, claimJob, getJob, completeJob };
+// 當 creep 無法取得 job 時的備援行為，盡量讓 creep 做有用的事而非 idle
+function fallbackTask(creep) {
+    if (!creep || !creep.room) return false;
+    const role = creep.memory.role;
+    // hauler: 嘗試 withdraw 或 pickup 附近能量
+    if (role === 'hauler' || role === 'remoteHauler') {
+        const cont = creep.pos.findClosestByPath(FIND_STRUCTURES, { filter: s => [STRUCTURE_CONTAINER, STRUCTURE_STORAGE].includes(s.structureType) && s.store[RESOURCE_ENERGY] > 50 });
+        if (cont) { if (creep.withdraw(cont, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(cont); return true; }
+        const drop = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, { filter: d => d.resourceType === RESOURCE_ENERGY && d.amount > 50 });
+        if (drop) { if (creep.pickup(drop) === ERR_NOT_IN_RANGE) creep.moveTo(drop); return true; }
+        return false;
+    }
+    // repairer: 找受損 road / tower 做 repair
+    if (role === 'repairer') {
+        const target = creep.pos.findClosestByPath(FIND_STRUCTURES, { filter: s => s.hits < s.hitsMax && s.structureType !== STRUCTURE_WALL });
+        if (target) { if (creep.repair(target) === ERR_NOT_IN_RANGE) creep.moveTo(target); return true; }
+        return false;
+    }
+    // builder: 已有內建 fallback (upgrade)，此處返回 false 以讓 builder 使用其 own logic
+    if (role === 'builder') return false;
+    // upgrader: 若沒能量就去 harvest
+    if (role === 'upgrader') {
+        if (creep.store[RESOURCE_ENERGY] > 0) {
+            if (creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.controller);
+            return true;
+        }
+        const src = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+        if (src) { if (creep.harvest(src) === ERR_NOT_IN_RANGE) creep.moveTo(src); return true; }
+        return false;
+    }
+    return false;
+}
+
+module.exports = { buildGlobalQueue, claimJob, getJob, completeJob, fallbackTask };

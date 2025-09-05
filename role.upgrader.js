@@ -13,6 +13,10 @@ module.exports = {
             if (cont) { if (creep.withdraw(cont, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(cont); return; }
             const src = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
             if (src && creep.harvest(src) === ERR_NOT_IN_RANGE) creep.moveTo(src);
+            else {
+                const jm = require('manager.jobManager');
+                jm.fallbackTask(creep);
+            }
         }
     }
 };

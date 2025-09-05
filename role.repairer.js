@@ -34,6 +34,10 @@ module.exports = {
                 });
                 if (target) { if (creep.repair(target) === ERR_NOT_IN_RANGE) creep.moveTo(target); }
                 else if (creep.room.controller && creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.controller);
+                else {
+                    const jm = require('manager.jobManager');
+                    jm.fallbackTask(creep);
+                }
             }
         } else {
             const cont = creep.pos.findClosestByPath(FIND_STRUCTURES, { filter: s => [STRUCTURE_CONTAINER, STRUCTURE_STORAGE].includes(s.structureType) && s.store[RESOURCE_ENERGY] > 0 });

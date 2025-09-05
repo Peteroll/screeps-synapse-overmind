@@ -14,6 +14,9 @@ module.exports = {
         if (source) {
             if (creep.pos.getRangeTo(source) > 1) creep.moveTo(source);
             else creep.harvest(source);
+        } else {
+            const jm = require('manager.jobManager');
+            jm.fallbackTask(creep);
         }
     }
 };

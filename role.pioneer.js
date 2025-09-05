@@ -44,6 +44,9 @@ module.exports = {
                 if (creep.build(spawnSite) === ERR_NOT_IN_RANGE) creep.moveTo(spawnSite);
             } else if (controller && (!controller.owner || controller.owner.username === creep.owner.username)) {
                 if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE) creep.moveTo(controller);
+            } else {
+                const jm = require('manager.jobManager');
+                jm.fallbackTask(creep);
             }
         }
     }

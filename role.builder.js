@@ -9,7 +9,15 @@ module.exports = {
         // 若有 jobId 但 job 已不存在 → 清除
         if (creep.memory.jobId && !jobManager.getJob(creep.memory.jobId)) delete creep.memory.jobId;
 
-        if (creep.memory.working) {
+    // 若 controller 即將降階 (danger) 或房間缺少 upgrader，builder 在沒有工作時會做為臨時 upgrader
+    const cfg = require('util.config');
+    const room = creep.room;
+    const ttd = room.controller && room.controller.ticksToDowngrade !== undefined ? room.controller.ticksToDowngrade : Infinity;
+    const upgraderCount = room.find(FIND_MY_CREEPS, { filter: c => c.memory.role === 'upgrader' }).length;
+    const minUp = (cfg.DOWNGRADE && cfg.DOWNGRADE.MIN_UPGRADERS) || 2;
+    const danger = ttd < (cfg.DOWNGRADE && cfg.DOWNGRADE.DANGER_TICKS || 4000) || upgraderCount < minUp;
+
+    if (creep.memory.working) {
             // 沒有工作就 claim build 或 repair 類
             if (!creep.memory.jobId) {
                 jobManager.claimJob(creep, j => j.type === 'build' || j.type === 'repair');
@@ -41,7 +49,7 @@ module.exports = {
                     delete creep.memory.jobId;
                 }
             } else {
-                // 沒 job → 升級
+                // 沒 job → 升級（或作為緊急 upgrader）
                 if (creep.room.controller && creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.controller);
             }
         } else {
@@ -52,6 +60,14 @@ module.exports = {
             if (drop) { if (creep.pickup(drop) === ERR_NOT_IN_RANGE) creep.moveTo(drop); return; }
             const src = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
             if (src && creep.harvest(src) === ERR_NOT_IN_RANGE) creep.moveTo(src);
+            // 若在危險期或沒有建造工作，且能量略為不足，直接轉為跑去 controller 升級以保護控制器
+            if (danger) {
+                // 若攜帶能量就去升級
+                if (creep.store[RESOURCE_ENERGY] > 0) {
+                    if (creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) creep.moveTo(creep.room.controller);
+                    return;
+                }
+            }
         }
     }
 };

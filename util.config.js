@@ -82,4 +82,9 @@ module.exports = {
         UNUSED_ROAD_MIN_RCL: 5, // 只有達到此 RCL 才做道路精簡 (避免早期過度移除)
         MAX_DISMANTLE_PER_RUN: 2 // 單次評估最多實際拆除數 (節流)
     }
+    ,
+    DOWNGRADE: {
+        DANGER_TICKS: 4000, // 若 controller.ticksToDowngrade 小於此視為危險
+        MIN_UPGRADERS: 2 // 危險期希望至少有多少 upgrader
+    }
 };

@@ -93,6 +93,21 @@ function run() {
             target.repairer += 1;
         }
 
+        // Controller 退化保護：若 ticksToDowngrade 剩餘過低 → 臨時提高 upgrader 需求並優先保證至少 1 名
+        if (room.controller && room.controller.ticksToDowngrade !== undefined) {
+            const ttd = room.controller.ticksToDowngrade;
+            // RCL2+ 常態 5000 / RCL1=20000；低於 1/6 視為危險
+            const danger = ttd < 4000; // 可再參數化
+            if (danger) {
+                if (!Memory.downgradeAlert) Memory.downgradeAlert = {};
+                if (!Memory.downgradeAlert[room.name] || Game.time % 100 === 0) {
+                    log.warn(`[Downgrade] ${room.name} ticksToDowngrade=${ttd} 啟動緊急升級保護`);
+                    Memory.downgradeAlert[room.name] = Game.time;
+                }
+                // 設最少目標 2 並稍後再覆蓋 target.upgrader
+            }
+        }
+
         // Miner 數量 = sources 數量 (至多 pattern 所需)
         const sources = room.find(FIND_SOURCES);
         target.miner = Math.max(sources.length, target.miner);
@@ -113,7 +128,7 @@ function run() {
             aggregatedRemote.reserver += remoteNeeds[r].reserver || 0;
         }
 
-        // 把遠程目標合併進 target
+    // 把遠程目標合併進 target
         target.remoteMiner = aggregatedRemote.remoteMiner;
         target.remoteHauler = aggregatedRemote.remoteHauler;
         target.reserver = aggregatedRemote.reserver;
@@ -137,7 +152,15 @@ function run() {
             const owned = Game.rooms[targetRoom] && Game.rooms[targetRoom].controller && Game.rooms[targetRoom].controller.my;
             if (!owned) target.settler = 1;
         }
-        for (const role of order) {
+        // 若 controller 降階危險，確保 upgrader 數量 >=2 並把 upgrader 插到優先序最前
+        let dangerDowngrade = false;
+        if (room.controller && room.controller.ticksToDowngrade && room.controller.ticksToDowngrade < 4000) {
+            dangerDowngrade = true;
+            target.upgrader = Math.max(target.upgrader || 0, 2);
+        }
+        const execOrder = dangerDowngrade ? ['upgrader'].concat(order.filter(r=>r!=='upgrader')) : order;
+
+        for (const role of execOrder) {
             if ((counts[role] || 0) >= (target[role] || 0)) continue;
             // 限制 settler / reserver 的最小能量門檻 (CLAIM 必須 >=600 + MOVE)
             if ((role === 'settler' || role === 'reserver') && room.energyAvailable < 650) continue;

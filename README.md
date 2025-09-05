@@ -13,14 +13,20 @@
 ---
 
 ## 策略名稱與嵌入
+新增 DOWNGRADE 設定 (`util.config.DOWNGRADE`):
 
-建議在 `main.js` 最上方加入：
+- DANGER_TICKS: controller.ticksToDowngrade 小於此視為危險（預設 4000）
+- MIN_UPGRADERS: 危險期期望至少有幾名 upgrader
 
-```js
 global.STRATEGY_NAME = 'Synapse Overmind';
 if (!Memory.strategyName) Memory.strategyName = global.STRATEGY_NAME;
 ```
 
+
+Builder 行為變更：
+
+- 當 controller 進入危險期或房內 `upgrader` 數量低於 `util.config.DOWNGRADE.MIN_UPGRADERS` 時，`builder` 在沒有建造/修復工作時會自動擔任 `upgrader`（前往 controller 升級）以防止降階。
+- 在危險期或缺乏 upgrader 時，builder 也會在取到少量能量後立刻優先前往 controller 升級，而不是等待填滿負載。
 HUD 或 Visual 可引用 `global.STRATEGY_NAME` 統一顯示。
 
 ## 功能總覽
@@ -109,6 +115,18 @@ HUD 或 Visual 可引用 `global.STRATEGY_NAME` 統一顯示。
 
 觀察：`Memory.layoutEval['WxxNyy'].dismantleQueue`
 取消拆除：將座標加入 `Memory.layout[room]` 對應清單即可。
+
+### Controller Downgrade Protection
+
+新增 DOWNGRADE 設定 (`util.config.DOWNGRADE`):
+- DANGER_TICKS: controller.ticksToDowngrade 小於此視為危險（預設 4000）
+- MIN_UPGRADERS: 危險期期望至少有幾名 upgrader
+
+Builder 行為變更：
+- 當 controller 進入危險期或全場 upgrader 不足時，`builder` 在沒有建造/修復工作時會自動擔任 `upgrader`（前往 controller 升級）以防止降階。
+- 在危險期，builder 也會在取到少量能量後立刻優先前往 controller 升級，而不是等待填滿負載。 
+
+此改動旨在降低 controller 降階風險，特別是在初期或災後復原階段。
 
 ## English Summary (Addendum)
 

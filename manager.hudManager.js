@@ -17,6 +17,9 @@ function draw() {
         var kpi = buildKPI();
         room.visual.text(`v${global.STRATEGY_VERSION} E:${(econ && econ.energy)||0} ${econ?econ.mode:''} T:${threat} ${war} ${mStr} CPU:${cpu}`, 1, 1, {align:'left',opacity:0.85,font:0.7});
         room.visual.text(`KPI H:${kpi.harvestRate} U:${kpi.upgradeRate} Idle:${kpi.haulerIdle}% Rev1k:${kpi.marketRev}`, 1, 2, {align:'left', opacity:0.7, font:0.6});
+        if (room.controller && room.controller.ticksToDowngrade < 5000) {
+            room.visual.text(`DOWNGRADE ${room.controller.ticksToDowngrade}`, 1, 3, {align:'left', color:'#ff5555', font:0.8, opacity:0.9});
+        }
     }
 }
 

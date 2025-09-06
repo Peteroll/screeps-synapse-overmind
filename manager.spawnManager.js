@@ -1,7 +1,7 @@
 // 進階 spawn 管理：根據房間礦點數量生產 miner，依據房間可用能量大量生產 upgrader
 module.exports = {
 	run: function () {
-		// 初始化 spawn queue
+	// 初始化 spawn queue
 		Memory.spawnQueue = Memory.spawnQueue || [];
 
 		// 計算現有 role 數量與 queue 中的 pending
@@ -20,6 +20,9 @@ module.exports = {
 		for (const sname in Game.spawns) {
 			const spawn = Game.spawns[sname];
 			const room = spawn.room;
+
+			// logging
+			try { require('util.log').debug(`[spawnManager] processing spawn ${sname} in room ${room.name}`); } catch(e) {}
 
 			// 掃描並記錄 container
 			if (room && room.find) {
@@ -52,6 +55,10 @@ module.exports = {
 			const containers = Memory.roomContainers[room.name] || [];
 			const desiredHauler = containers.length > 0 ? 1 : 0;
 
+			// 檢查是否有建築工地，需要 builder
+			const sites = room.find ? room.find(FIND_CONSTRUCTION_SITES) : [];
+			const desiredBuilder = sites.length > 0 ? Math.min(3, sites.length) : 0;
+
 			// 當前含 pending 的數量
 			const haveMiner = (counts.miner || 0) + (pending.miner || 0);
 			const haveUpgrader = (counts.upgrader || 0) + (pending.upgrader || 0);
@@ -71,6 +78,14 @@ module.exports = {
 				continue;
 			}
 
+			// 建築工地存在時排 builder
+			const haveBuilder = (counts.builder || 0) + (pending.builder || 0);
+			if (haveBuilder < desiredBuilder) {
+				Memory.spawnQueue.push({ body: buildBuilderBody(room.energyAvailable), memory: { role: 'builder' } });
+				pending.builder = (pending.builder || 0) + 1;
+				continue;
+			}
+
 			// 最後排 upgrader
 			if (haveUpgrader < desiredUpgrader) {
 				Memory.spawnQueue.push({ body: buildUpgraderBody(room.energyAvailable), memory: { role: 'upgrader' } });
@@ -83,6 +98,14 @@ module.exports = {
 			if (energy >= 800) return [WORK, WORK, WORK, WORK, CARRY, CARRY, MOVE, MOVE, MOVE];
 			if (energy >= 600) return [WORK, WORK, WORK, CARRY, CARRY, MOVE, MOVE];
 			if (energy >= 400) return [WORK, WORK, CARRY, MOVE, MOVE];
+			return [WORK, CARRY, MOVE];
+		}
+
+		function buildBuilderBody(energy) {
+			// builder 以平衡 WORK/CARRY/MOVE 為主，避免太大導致等待過久
+			if (energy >= 800) return [WORK, WORK, CARRY, CARRY, MOVE, MOVE, MOVE];
+			if (energy >= 600) return [WORK, WORK, CARRY, MOVE, MOVE];
+			if (energy >= 400) return [WORK, CARRY, MOVE, MOVE];
 			return [WORK, CARRY, MOVE];
 		}
 

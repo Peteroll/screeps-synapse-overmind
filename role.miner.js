@@ -37,7 +37,15 @@ module.exports = {
             }
         }
 
-        // 沒有可交付目標就丟在地上，等待 hauler 或 upgrader 撿取
+        // no available transfer target: assist upgrading controller if possible
+        const ctrl = creep.room && creep.room.controller;
+        if (ctrl && creep.pos.getRangeTo(ctrl) <= 3 && creep.store[RESOURCE_ENERGY] > 0) {
+            // if close enough and carrying energy, upgrade
+            if (creep.upgradeController(ctrl) === ERR_NOT_IN_RANGE) creep.moveTo(ctrl);
+            return;
+        }
+
+        // otherwise drop energy and wait for hauler
         creep.drop(RESOURCE_ENERGY);
     }
 };
